@@ -1,39 +1,28 @@
 #!/usr/bin/env python3
 """
 MAIN SCRIPT - TriFuse Cyberbullying Detection
-Optimized for your specific configuration
+Now with K-Fold Cross Validation Support
 """
 
 import os
 import sys
-import torch  # ADDED: Import torch before setting env vars
+import torch
 
 # ⬇️⬇️⬇️ FIX FOR PBS/TORCH ERROR ⬇️⬇️⬇️
-# Set temporary directory to a valid location in your home directory
 home_dir = os.path.expanduser('~')
 temp_dir = os.path.join(home_dir, 'tmp')
-
-# Create the directory if it doesn't exist
 os.makedirs(temp_dir, exist_ok=True)
 
-# Set environment variables
 os.environ['TMPDIR'] = temp_dir
 os.environ['TEMP'] = temp_dir
 os.environ['TMP'] = temp_dir
 os.environ['HOME'] = home_dir
 
-# Also set for PyTorch compilation
 torch_ext_dir = os.path.join(temp_dir, 'torch_extensions')
 os.makedirs(torch_ext_dir, exist_ok=True)
 os.environ['TORCH_EXTENSIONS_DIR'] = torch_ext_dir
-
-# Disable PyTorch JIT compilation to avoid the error
 os.environ['PYTORCH_JIT'] = '0'
-
-# Disable torch dynamo which is causing the issue
 os.environ['TORCHDYNAMO_DISABLE'] = '1'
-
-# Disable other problematic features
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 # ⬆️⬆️⬆️ END FIX ⬆️⬆️⬆️
 
@@ -54,7 +43,10 @@ sys.path.insert(0, os.path.join(current_dir, 'src'))
 try:
     from data_loader import CyberbullyingDataset, CyberbullyingTorchDataset
     from models import OptimizedTriFuseModel
-    from baseline_models import BiLSTMBaseline, CNNBaseline
+    from baseline_models import (
+        BiLSTMBaseline, CNNBaseline, BERTBaseline, 
+        TunedLSTMBaseline, RandomForestEnsemble, LightGBMEnsemble
+    )
     from ablation_models import create_ablation_model
     from attention_optimizer import EnhancedAttentionTrainer
     from utils import (
@@ -69,6 +61,10 @@ except ImportError as e:
     print(f"Current directory: {current_dir}")
     print(f"Files in src: {os.listdir(os.path.join(current_dir, 'src')) if os.path.exists(os.path.join(current_dir, 'src')) else 'src not found'}")
     sys.exit(1)
+
+# ==================== ADD K-FOLD IMPORTS ====================
+from sklearn.model_selection import StratifiedKFold
+from torch.utils.data import Subset, ConcatDataset
 
 def load_config(config_path: str = "configs/config.yaml"):
     """Load configuration file"""
@@ -286,7 +282,7 @@ def create_sample_dataset(data_path):
     
     print(f"   Created sample dataset with {len(df)} samples in {data_path}")
 
-def train_model(model, model_name, train_loader, val_loader, test_loader, config, device):
+def train_model(model, model_name, train_loader, val_loader, test_loader, config, device, is_sklearn=False):
     """Train and evaluate a model"""
     from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
     
@@ -487,13 +483,308 @@ def train_model(model, model_name, train_loader, val_loader, test_loader, config
         'labels': test_labels
     }
 
+# ==================== ADDED K-FOLD FUNCTIONS ====================
+
+def kfold_train_model(model, model_name, train_loader, val_loader, config, device):
+    """Simplified training for K-fold (no test evaluation)"""
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=config['training']['learning_rate'],
+        weight_decay=config['training']['weight_decay']
+    )
+    
+    criterion = torch.nn.CrossEntropyLoss()
+    best_val_acc = 0
+    best_model_state = None
+    
+    epochs = min(config['training']['epochs'], 20)  # Shorter for K-fold
+    
+    for epoch in range(epochs):
+        # Training
+        model.train()
+        train_loss = 0
+        
+        for sequences, labels, texts in train_loader:
+            sequences = sequences.to(device)
+            labels = labels.to(device)
+            
+            optimizer.zero_grad()
+            
+            if hasattr(model, 'forward_full'):
+                try:
+                    logits = model(sequences)
+                except TypeError:
+                    logits, _ = model(texts, sequences)
+            else:
+                logits = model(sequences)
+            
+            loss = criterion(logits, labels)
+            loss.backward()
+            
+            if 'gradient_clip' in config['training']:
+                torch.nn.utils.clip_grad_norm_(
+                    model.parameters(), 
+                    config['training']['gradient_clip']
+                )
+            
+            optimizer.step()
+            train_loss += loss.item()
+        
+        # Validation
+        model.eval()
+        val_correct = 0
+        val_total = 0
+        
+        with torch.no_grad():
+            for sequences, labels, texts in val_loader:
+                sequences = sequences.to(device)
+                labels = labels.to(device)
+                
+                if hasattr(model, 'forward_full'):
+                    try:
+                        logits = model(sequences)
+                    except TypeError:
+                        logits, _ = model(texts, sequences)
+                else:
+                    logits = model(sequences)
+                
+                preds = torch.argmax(logits, dim=1)
+                val_correct += (preds == labels).sum().item()
+                val_total += labels.size(0)
+        
+        val_acc = val_correct / val_total if val_total > 0 else 0
+        
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            best_model_state = model.state_dict().copy()
+    
+    # Load best model
+    if best_model_state:
+        model.load_state_dict(best_model_state)
+    
+    return model, best_val_acc
+
+def run_kfold_validation(model_name, dataset, vocab_size, config, device, k_folds=5):
+    """Run K-fold cross validation for a single model"""
+    print(f"\n🔬 {k_folds}-Fold Cross Validation for {model_name}")
+    print(f"{'='*60}")
+    
+    # Get labels from dataset
+    labels = []
+    for i in range(len(dataset)):
+        _, label, _ = dataset[i]
+        labels.append(label.item())
+    
+    kfold = StratifiedKFold(n_splits=k_folds, shuffle=True, random_state=42)
+    
+    fold_accuracies = []
+    fold_f1_scores = []
+    
+    from sklearn.metrics import accuracy_score, f1_score
+    from torch.utils.data import DataLoader
+    
+    for fold, (train_idx, val_idx) in enumerate(kfold.split(range(len(dataset)), labels)):
+        print(f"\n  Fold {fold + 1}/{k_folds}")
+        
+        # Create subsets
+        train_subset = Subset(dataset, train_idx)
+        val_subset = Subset(dataset, val_idx)
+        
+        # Create loaders
+        train_loader = DataLoader(train_subset, batch_size=config['training']['batch_size'], shuffle=True)
+        val_loader = DataLoader(val_subset, batch_size=config['training']['batch_size'], shuffle=False)
+        
+        # Initialize model
+        if model_name == 'trifuse':
+            model = OptimizedTriFuseModel(vocab_size, config=config['model']).to(device)
+        elif model_name == 'bilstm':
+            model = BiLSTMBaseline(
+                vocab_size=vocab_size,
+                embed_dim=config['model']['embed_dim'],
+                hidden_dim=256,
+                num_layers=2,
+                num_classes=config['model']['num_classes'],
+                dropout=config['model']['dropout_rate']
+            ).to(device)
+        elif model_name == 'cnn':
+            model = CNNBaseline(
+                vocab_size=vocab_size,
+                embed_dim=config['model']['embed_dim'],
+                num_filters=128,
+                filter_sizes=[2, 3, 4, 5],
+                num_classes=config['model']['num_classes'],
+                dropout=config['model']['dropout_rate']
+            ).to(device)
+        elif model_name == 'bert':
+            model = BERTBaseline(
+                num_classes=config['model']['num_classes'],
+                dropout=config['model']['dropout_rate']
+            ).to(device)
+        elif model_name == 'tuned_lstm':
+            model = TunedLSTMBaseline(
+                vocab_size=vocab_size,
+                embed_dim=config['model']['embed_dim'],
+                hidden_dim=256,
+                num_layers=3,
+                num_classes=config['model']['num_classes'],
+                dropout=config['model']['dropout_rate']
+            ).to(device)
+        else:
+            # Try ablation model
+            try:
+                model = create_ablation_model(model_name, vocab_size, config['model']).to(device)
+            except:
+                print(f"  ❌ Model {model_name} not found, skipping...")
+                return None
+        
+        # Train this fold
+        model, best_val_acc = kfold_train_model(model, f"{model_name}_fold{fold+1}", 
+                                               train_loader, val_loader, config, device)
+        
+        # Evaluate on validation set
+        model.eval()
+        all_preds = []
+        all_labels = []
+        
+        with torch.no_grad():
+            for sequences, labels_batch, texts in val_loader:
+                sequences = sequences.to(device)
+                labels_batch = labels_batch.to(device)
+                
+                if hasattr(model, 'forward_full'):
+                    try:
+                        logits = model(sequences)
+                    except TypeError:
+                        logits, _ = model(texts, sequences)
+                else:
+                    logits = model(sequences)
+                
+                preds = torch.argmax(logits, dim=1)
+                all_preds.extend(preds.cpu().numpy())
+                all_labels.extend(labels_batch.cpu().numpy())
+        
+        accuracy = accuracy_score(all_labels, all_preds)
+        f1 = f1_score(all_labels, all_preds, average='weighted')
+        
+        fold_accuracies.append(accuracy)
+        fold_f1_scores.append(f1)
+        
+        print(f"    Accuracy: {accuracy:.4f}, F1: {f1:.4f}")
+    
+    # Calculate statistics
+    mean_accuracy = np.mean(fold_accuracies)
+    std_accuracy = np.std(fold_accuracies)
+    mean_f1 = np.mean(fold_f1_scores)
+    
+    print(f"\n  📊 {model_name.upper()} - {k_folds}-Fold Results:")
+    print(f"    Mean Accuracy:  {mean_accuracy:.4f} (±{std_accuracy:.4f})")
+    print(f"    Mean F1-Score:  {mean_f1:.4f}")
+    print(f"    Fold Accuracies: {[f'{acc:.4f}' for acc in fold_accuracies]}")
+    
+    return {
+        'model_name': model_name,
+        'mean_accuracy': mean_accuracy,
+        'std_accuracy': std_accuracy,
+        'mean_f1_score': mean_f1,
+        'fold_accuracies': fold_accuracies,
+        'fold_f1_scores': fold_f1_scores
+    }
+
+def compare_models_kfold(models_to_test, train_dataset, val_dataset, vocab_size, config, device, k_folds=5):
+    """Compare multiple models using K-fold cross validation"""
+    print(f"\n{'='*80}")
+    print("🧪 K-FOLD CROSS VALIDATION - MODEL COMPARISON")
+    print(f"{'='*80}")
+    
+    # Combine train and val for K-fold
+    kfold_dataset = ConcatDataset([train_dataset, val_dataset])
+    
+    results = {}
+    
+    for model_name in models_to_test:
+        kfold_result = run_kfold_validation(
+            model_name=model_name,
+            dataset=kfold_dataset,
+            vocab_size=vocab_size,
+            config=config,
+            device=device,
+            k_folds=k_folds
+        )
+        
+        if kfold_result:
+            results[model_name] = kfold_result
+    
+    # Display comparison table
+    if results:
+        print(f"\n{'='*80}")
+        print("🏆 K-FOLD COMPARISON RESULTS")
+        print(f"{'='*80}")
+        print(f"{'Model':<20} {'Mean Accuracy':<15} {'Std Dev':<10} {'Mean F1':<15}")
+        print(f"{'-'*80}")
+        
+        for model_name, result in results.items():
+            print(f"{model_name.replace('_', ' ').title():<20} "
+                  f"{result['mean_accuracy']:<15.4f} "
+                  f"{result['std_accuracy']:<10.4f} "
+                  f"{result['mean_f1_score']:<15.4f}")
+    
+    return results
+
+def generate_kfold_paper_table(kfold_results):
+    """Generate LaTeX table for paper from K-fold results"""
+    print(f"\n{'='*80}")
+    print("📄 LaTeX TABLE FOR PAPER")
+    print(f"{'='*80}")
+    
+    latex_table = """
+\\begin{table}[htbp]
+\\centering
+\\caption{K-fold Cross Validation Results (Accuracy in \\%)}
+\\label{tab:kfold_results}
+\\begin{tabular}{lccc}
+\\toprule
+\\textbf{Model} & \\textbf{Mean} & \\textbf{Std Dev} & \\textbf{95\\% CI} \\\\
+\\midrule
+"""
+    
+    for model_name, result in kfold_results.items():
+        mean_acc = result['mean_accuracy'] * 100
+        std_acc = result['std_accuracy'] * 100
+        ci_lower = (mean_acc - 1.96 * std_acc / np.sqrt(len(result['fold_accuracies'])))
+        ci_upper = (mean_acc + 1.96 * std_acc / np.sqrt(len(result['fold_accuracies'])))
+        
+        display_name = model_name.replace('_', ' ').title()
+        if model_name == 'trifuse':
+            display_name = "\\textbf{TriFuse (Proposed)}"
+        
+        latex_table += f"{display_name} & {mean_acc:.2f} & {std_acc:.2f} & ({ci_lower:.2f}, {ci_upper:.2f}) \\\\\n"
+    
+    latex_table += """\\bottomrule
+\\end{tabular}
+\\end{table}
+"""
+    
+    print(latex_table)
+    
+    # Save to file
+    table_file = os.path.join('outputs', 'kfold_results_table.tex')
+    with open(table_file, 'w') as f:
+        f.write(latex_table)
+    
+    print(f"\n💾 LaTeX table saved to: {table_file}")
+    
+    return latex_table
+
+# ==================== MAIN FUNCTION (UPDATED) ====================
+
 def main():
     """Main execution"""
     parser = argparse.ArgumentParser(description='TriFuse Cyberbullying Detection')
     parser.add_argument('--config', type=str, default='configs/config.yaml', help='Config file path')
-    parser.add_argument('--mode', choices=['full', 'ablation', 'baseline', 'single'], 
+    parser.add_argument('--mode', choices=['full', 'ablation', 'baseline', 'single', 'kfold'], 
                        default='full', help='Run mode')
     parser.add_argument('--model', type=str, default='trifuse', help='Specific model (for single mode)')
+    parser.add_argument('--k_folds', type=int, default=5, help='Number of folds for cross validation')
     parser.add_argument('--quick', action='store_true', help='Quick test mode (10 epochs)')
     parser.add_argument('--report', action='store_true', default=True, help='Generate comprehensive report')
     args = parser.parse_args()
@@ -505,6 +796,8 @@ def main():
     print(f"Mode: {args.mode}")
     if args.mode == 'single':
         print(f"Model: {args.model}")
+    if args.mode == 'kfold':
+        print(f"K-Folds: {args.k_folds}")
     print(f"Quick mode: {'Yes' if args.quick else 'No'}")
     
     # Load config
@@ -527,28 +820,149 @@ def main():
     
     from torch.utils.data import DataLoader
     
-    # Create data loaders
-    train_loader = DataLoader(
-        train_dataset, 
-        batch_size=config['training']['batch_size'], 
-        shuffle=True, 
-        num_workers=0 # Reduce workers for stability
-    )
+    # Create data loaders (only if not in K-fold mode)
+    if args.mode != 'kfold':
+        train_loader = DataLoader(
+            train_dataset, 
+            batch_size=config['training']['batch_size'], 
+            shuffle=True, 
+            num_workers=0
+        )
+        
+        val_loader = DataLoader(
+            val_dataset, 
+            batch_size=config['training']['batch_size'], 
+            shuffle=False, 
+            num_workers=0
+        )
+        
+        test_loader = DataLoader(
+            test_dataset, 
+            batch_size=config['training']['batch_size'], 
+            shuffle=False, 
+            num_workers=0
+        )
     
-    val_loader = DataLoader(
-        val_dataset, 
-        batch_size=config['training']['batch_size'], 
-        shuffle=False, 
-        num_workers=0
-    )
+    # ==================== K-FOLD MODE ====================
+    if args.mode == 'kfold':
+        print("\n" + "="*80)
+        print("🧪 RUNNING K-FOLD CROSS VALIDATION")
+        print("="*80)
+        
+        # Choose which models to compare
+        if args.model == 'trifuse':
+            models_to_test = ['trifuse']
+        elif args.model == 'all':
+            models_to_test = ['trifuse', 'bilstm', 'cnn', 'tuned_lstm', 'bert', 'lexical_only', 'semantic_only', 'structural_only']
+        elif args.model == 'baselines':
+            models_to_test = ['bilstm', 'cnn', 'tuned_lstm', 'bert']
+        else:
+            models_to_test = [args.model]
+        
+        # Run K-fold comparison
+        kfold_results = compare_models_kfold(
+            models_to_test=models_to_test,
+            train_dataset=train_dataset,
+            val_dataset=val_dataset,
+            vocab_size=vocab_size,
+            config=config,
+            device=device,
+            k_folds=args.k_folds
+        )
+        
+        # Save K-fold results
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        results_file = os.path.join('outputs', f'kfold_results_{timestamp}.json')
+        
+        # Convert to serializable format
+        serializable_results = {}
+        for model_name, result in kfold_results.items():
+            serializable_results[model_name] = {
+                'mean_accuracy': float(result['mean_accuracy']),
+                'std_accuracy': float(result['std_accuracy']),
+                'mean_f1_score': float(result['mean_f1_score']),
+                'fold_accuracies': [float(acc) for acc in result['fold_accuracies']]
+            }
+        
+        with open(results_file, 'w') as f:
+            json.dump(serializable_results, f, indent=2)
+        
+        print(f"\n💾 K-fold results saved to: {results_file}")
+        
+        # Generate paper table
+        generate_kfold_paper_table(kfold_results)
+        
+        # Also test the best model from K-fold on test set
+        print("\n" + "="*80)
+        print("🧪 Testing best K-fold model on test set...")
+        print("="*80)
+        
+        # Find best model from K-fold
+        if kfold_results:
+            best_model_name = max(kfold_results.items(), key=lambda x: x[1]['mean_accuracy'])[0]
+            print(f"Best model from K-fold: {best_model_name}")
+            
+            # Train final model on full training data
+            full_train_dataset = ConcatDataset([train_dataset, val_dataset])
+            full_train_loader = DataLoader(full_train_dataset, 
+                                         batch_size=config['training']['batch_size'], 
+                                         shuffle=True)
+            test_loader = DataLoader(test_dataset, 
+                                   batch_size=config['training']['batch_size'], 
+                                   shuffle=False)
+            
+            if best_model_name == 'trifuse':
+                final_model = OptimizedTriFuseModel(vocab_size, config=config['model']).to(device)
+            elif best_model_name == 'bilstm':
+                final_model = BiLSTMBaseline(
+                    vocab_size=vocab_size,
+                    embed_dim=config['model']['embed_dim'],
+                    hidden_dim=256,
+                    num_layers=2,
+                    num_classes=config['model']['num_classes'],
+                    dropout=config['model']['dropout_rate']
+                ).to(device)
+            elif best_model_name == 'cnn':
+                final_model = CNNBaseline(
+                    vocab_size=vocab_size,
+                    embed_dim=config['model']['embed_dim'],
+                    num_filters=128,
+                    filter_sizes=[2, 3, 4, 5],
+                    num_classes=config['model']['num_classes'],
+                    dropout=config['model']['dropout_rate']
+                ).to(device)
+            elif best_model_name == 'tuned_lstm':
+                final_model = TunedLSTMBaseline(
+                    vocab_size=vocab_size,
+                    embed_dim=config['model']['embed_dim'],
+                    hidden_dim=256,
+                    num_layers=3,
+                    num_classes=config['model']['num_classes'],
+                    dropout=config['model']['dropout_rate']
+                ).to(device)
+            elif best_model_name == 'bert':
+                final_model = BERTBaseline(
+                    num_classes=config['model']['num_classes'],
+                    dropout=config['model']['dropout_rate']
+                ).to(device)
+            else:
+                try:
+                    final_model = create_ablation_model(best_model_name, vocab_size, config['model']).to(device)
+                except:
+                    print(f"❌ Could not create model {best_model_name}")
+                    return 0
+            
+            # Train final model
+            final_result = train_model(final_model, f"{best_model_name}_final", 
+                                      full_train_loader, test_loader, test_loader, config, device)
+            
+            print(f"\n🎯 Final Test Performance of Best Model ({best_model_name}):")
+            print(f"   Accuracy:  {final_result['accuracy']:.4f}")
+            print(f"   F1-Score:  {final_result['f1_score']:.4f}")
+        
+        return 0
     
-    test_loader = DataLoader(
-        test_dataset, 
-        batch_size=config['training']['batch_size'], 
-        shuffle=False, 
-        num_workers=0
-    )
-    
+    # ==================== ORIGINAL MODES ====================
     # Results storage
     results = {}
     histories = {}
@@ -580,6 +994,22 @@ def main():
                 dropout=config['model']['dropout_rate']
             ).to(device)
             print(f"   Model: CNN Baseline")
+        elif args.model == 'bert':
+            model = BERTBaseline(
+                num_classes=config['model']['num_classes'],
+                dropout=config['model']['dropout_rate']
+            ).to(device)
+            print(f"   Model: BERT Baseline")
+        elif args.model == 'tuned_lstm':
+            model = TunedLSTMBaseline(
+                vocab_size=vocab_size,
+                embed_dim=config['model']['embed_dim'],
+                hidden_dim=256,
+                num_layers=3,
+                num_classes=config['model']['num_classes'],
+                dropout=config['model']['dropout_rate']
+            ).to(device)
+            print(f"   Model: Tuned LSTM Baseline")
         else:
             # Try ablation model
             try:
@@ -623,6 +1053,28 @@ def main():
         result = train_model(cnn_model, "CNN", train_loader, val_loader, test_loader, config, device)
         results['cnn'] = result
         histories['cnn'] = result['history']
+        
+        # Tuned LSTM Baseline
+        tuned_lstm_model = TunedLSTMBaseline(
+            vocab_size=vocab_size,
+            embed_dim=config['model']['embed_dim'],
+            hidden_dim=256,
+            num_layers=3,
+            num_classes=config['model']['num_classes'],
+            dropout=config['model']['dropout_rate']
+        ).to(device)
+        result = train_model(tuned_lstm_model, "TunedLSTM", train_loader, val_loader, test_loader, config, device)
+        results['tuned_lstm'] = result
+        histories['tuned_lstm'] = result['history']
+        
+        # BERT Baseline
+        bert_model = BERTBaseline(
+            num_classes=config['model']['num_classes'],
+            dropout=config['model']['dropout_rate']
+        ).to(device)
+        result = train_model(bert_model, "BERT", train_loader, val_loader, test_loader, config, device)
+        results['bert'] = result
+        histories['bert'] = result['history']
     
     if args.mode in ['full', 'ablation']:
         print("\n" + "="*60)

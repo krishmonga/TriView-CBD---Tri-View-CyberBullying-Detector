@@ -116,7 +116,7 @@ def plot_training_history(history: Dict, save_path: str = None, show: bool = Tru
 
 def plot_confusion_matrix_with_metrics(y_true, y_pred, save_path: str = None,
                                      class_names: List[str] = None,
-                                     normalize: bool = False):
+                                     normalize: bool = False, show: bool = True):
     """Plot confusion matrix with detailed metrics"""
     set_plot_style()
     
@@ -196,7 +196,7 @@ def plot_confusion_matrix_with_metrics(y_true, y_pred, save_path: str = None,
     
     return cm
 
-def plot_roc_curve(y_true, y_prob, save_path: str = None):
+def plot_roc_curve(y_true, y_prob, save_path: str = None, show: bool = True):
     """Plot ROC curve"""
     set_plot_style()
     
@@ -221,11 +221,14 @@ def plot_roc_curve(y_true, y_prob, save_path: str = None):
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"📊 ROC curve saved to: {save_path}")
     
-    plt.show()
+    if show:
+        plt.show()
+    else:
+        plt.close()
     
     return roc_auc
 
-def plot_precision_recall_curve(y_true, y_prob, save_path: str = None):
+def plot_precision_recall_curve(y_true, y_prob, save_path: str = None, show: bool = True):
     """Plot Precision-Recall curve"""
     set_plot_style()
     
@@ -249,11 +252,14 @@ def plot_precision_recall_curve(y_true, y_prob, save_path: str = None):
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"📊 Precision-Recall curve saved to: {save_path}")
     
-    plt.show()
+    if show:
+        plt.show()
+    else:
+        plt.close()
     
     return avg_precision
 
-def plot_attention_analysis(attention_analysis: Dict, save_path: str = None):
+def plot_attention_analysis(attention_analysis: Dict, save_path: str = None, show: bool = True):
     """Plot comprehensive attention analysis"""
     if not attention_analysis:
         print("⚠ No attention analysis data available")
@@ -362,9 +368,12 @@ def plot_attention_analysis(attention_analysis: Dict, save_path: str = None):
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"📊 Attention analysis plot saved to: {save_path}")
     
-    plt.show()
+    if show:
+        plt.show()
+    else:
+        plt.close()
 
-def plot_model_comparison(results: Dict, save_path: str = None):
+def plot_model_comparison(results: Dict, save_path: str = None, show: bool = True):
     """Plot model comparison results"""
     set_plot_style()
     
@@ -478,7 +487,10 @@ def plot_model_comparison(results: Dict, save_path: str = None):
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"📊 Model comparison plot saved to: {save_path}")
     
-    plt.show()
+    if show:
+        plt.show()
+    else:
+        plt.close()
 
 def generate_latex_tables(results: Dict, output_dir: str):
     """Generate LaTeX tables for IEEE paper"""

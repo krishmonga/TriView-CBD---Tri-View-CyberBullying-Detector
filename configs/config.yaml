@@ -6,7 +6,7 @@ system:
 
 # ==================== DATA CONFIG ====================
 data:
-  data_path: '/home/pardeep.g/cyberbullying/trifuse model/krish/dataset/'
+  data_path: 'dataset/'  # Updated to relative path for flexibility
   max_seq_len: 128
   test_size: 0.15
   val_size: 0.15
@@ -17,23 +17,23 @@ data:
   augmentation_prob: 0.3
 
 # ==================== MODEL CONFIG ====================
-# ==================== MODEL CONFIG ====================
 model:
   # Architecture
   num_classes: 2
   embed_dim: 304
   
-  # FIXED: Correct feature dimensions for YOUR MODEL ARCHITECTURE
-  lexical_features: 512      # NOT 130! CNN produces: 128 filters * 4 filter_sizes = 512
-  semantic_features: 608    # NOT 309! Transformer produces: embed_dim * 2 = 300 * 2 = 600
-  structural_features: 304   # BiLSTM produces: embed_dim = 300
+  # Feature dimensions (optimized for new models)
+  lexical_features: 512        # CNN: 128 filters * 4 filter_sizes = 512
+  semantic_features: 608       # Transformer: embed_dim * 2 = 304 * 2 = 608
+  structural_features: 304     # BiLSTM: embed_dim = 304
   
-  # Vocabulary size - IMPORTANT: Check your actual vocabulary!
-  vocab_size: 50000         # Adjust based on your tokenizer
+  # Vocabulary size
+  vocab_size: 50000
   
-  # Attention optimization
+  # Attention optimization (NEW)
   attention_diversity_weight: 0.1
   attention_entropy_weight: 0.05
+  attention_temperature: 1.0    # NEW: Temperature scaling for attention
   
   # Regularization
   dropout_rate: 0.3
@@ -44,15 +44,26 @@ model:
   semantic_num_layers: 2
   structural_bidirectional: true
   structural_num_layers: 2
+  
+  # NEW: Baseline model configurations
+  bert_model_name: 'distilbert-base-uncased'  # BERT variant
+  bert_hidden_dim: 512
+  
+  tuned_lstm_hidden_dim: 256
+  tuned_lstm_num_layers: 3  # More layers for tuned LSTM
+  
+  # Random Forest & LightGBM
+  rf_n_estimators: 100
+  lgb_n_estimators: 200
 
 # ==================== TRAINING CONFIG ====================
 training:
   # Hyperparameters
-  batch_size: 32  # Reduced from 64 for memory
-  learning_rate: 0.001  # Increased from 3e-5 for faster convergence
+  batch_size: 32
+  learning_rate: 0.001
   weight_decay: 0.0001
-  epochs: 20
-  patience: 10
+  epochs: 100  # Increased for better convergence
+  patience: 15  # Increased patience
   min_delta: 0.001
   
   # Loss functions
@@ -66,19 +77,24 @@ training:
   # Optimization
   optimizer: 'adamw'
   scheduler: 'cosine'
+  
+  # NEW: Additional training configurations
+  warmup_steps: 500  # Linear warmup
+  gradient_accumulation_steps: 1
+  mixed_precision: false  # Set to true for faster training on GPU
 
 # ==================== PATHS ====================
 paths:
-  base_output: '/home/pardeep.g/cyberbullying/trifuse model/krish/outputs/'
-  models_dir: '/home/pardeep.g/cyberbullying/trifuse model/krish/outputs/models/'
-  plots_dir: '/home/pardeep.g/cyberbullying/trifuse model/krish/outputs/plots/'
-  results_dir: '/home/pardeep.g/cyberbullying/trifuse model/krish/outputs/results/'
-  paper_tables_dir: '/home/pardeep.g/cyberbullying/trifuse model/krish/outputs/paper_tables/'
-  logs_dir: '/home/pardeep.g/cyberbullying/trifuse model/krish/outputs/logs/'
+  base_output: 'outputs/'  # Updated to relative path
+  models_dir: 'outputs/models/'
+  plots_dir: 'outputs/plots/'
+  results_dir: 'outputs/results/'
+  paper_tables_dir: 'outputs/paper_tables/'
+  logs_dir: 'outputs/logs/'
 
 # ==================== DEBUGGING FLAGS ====================
 debug:
-  print_shapes: true
-  validate_dimensions: true
+  print_shapes: false
+  validate_dimensions: false
   log_batch_info: false
-  
+  verbose: false

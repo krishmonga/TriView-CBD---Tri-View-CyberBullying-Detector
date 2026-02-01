@@ -320,6 +320,29 @@ class EnhancedStructuralView(nn.Module):
         output = self.output(context)
         return output
 
+class ResidualBlock(nn.Module):
+    """Residual block with layer normalization for improved gradient flow"""
+    def __init__(self, input_dim: int, output_dim: int, dropout_rate: float = 0.3):
+        super().__init__()
+        self.use_residual = (input_dim == output_dim)
+        
+        self.block = nn.Sequential(
+            nn.Linear(input_dim, output_dim),
+            nn.LayerNorm(output_dim),
+            nn.GELU(),
+            nn.Dropout(dropout_rate),
+            nn.Linear(output_dim, output_dim),
+            nn.LayerNorm(output_dim)
+        )
+        
+        if not self.use_residual:
+            self.projection = nn.Linear(input_dim, output_dim)
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        residual = x if self.use_residual else self.projection(x)
+        output = self.block(x)
+        return F.gelu(output + residual)
+
 class SingleViewClassifier(nn.Module):
     """Classifier for single view models"""
     def __init__(self, view_model, num_classes=2, dropout_rate=0.3):
@@ -345,7 +368,7 @@ class SingleViewClassifier(nn.Module):
         return logits
 
 class OptimizedTriFuseModel(nn.Module):
-    """Optimized TriFuse Model - FIXED INITIALIZATION"""
+    """Optimized TriFuse Model - Enhanced with Residual Connections and Improved Regularization"""
     def __init__(self, vocab_size: int, config: Dict = None):
         super().__init__()
         self.config = config or {}
@@ -362,27 +385,34 @@ class OptimizedTriFuseModel(nn.Module):
         self.semantic_view = EnhancedSemanticView(vocab_size, config=view_config)
         self.structural_view = EnhancedStructuralView(vocab_size, config=view_config)
         
-        # Dynamic attention weights
+        # Dynamic attention weights with temperature scaling
         self.attention_weights = nn.Parameter(torch.ones(3))
+        self.attention_temperature = config.get('attention_temperature', 1.0)
         
-        # Enhanced fusion
+        dropout_rate = config.get('dropout_rate', 0.3)
+        
+        # Enhanced fusion with residual blocks for better accuracy
         self.fusion = nn.Sequential(
             nn.Linear(256 * 3, 1024),
             nn.LayerNorm(1024),
-            nn.ReLU(),
-            nn.Dropout(config.get('dropout_rate', 0.3)),
+            nn.GELU(),
+            nn.Dropout(dropout_rate * 0.8),
+            ResidualBlock(1024, 1024, dropout_rate),
             nn.Linear(1024, 512),
             nn.LayerNorm(512),
-            nn.ReLU(),
-            nn.Dropout(config.get('dropout_rate', 0.3)),
-            nn.Linear(512, 256)
+            nn.GELU(),
+            nn.Dropout(dropout_rate * 0.8),
+            ResidualBlock(512, 512, dropout_rate),
+            nn.Linear(512, 256),
+            nn.LayerNorm(256)
         )
         
-        # Classifier
+        # Classifier with improved structure
         self.classifier = nn.Sequential(
             nn.Linear(256, 128),
-            nn.ReLU(),
-            nn.Dropout(config.get('dropout_rate', 0.3)),
+            nn.LayerNorm(128),
+            nn.GELU(),
+            nn.Dropout(dropout_rate),
             nn.Linear(128, config.get('num_classes', 2))
         )
         
@@ -412,8 +442,9 @@ class OptimizedTriFuseModel(nn.Module):
         semantic_features = self.semantic_view(x)
         structural_features = self.structural_view(x)
         
-        # Dynamic attention
-        attention_weights = F.softmax(self.attention_weights, dim=0)
+        # Dynamic attention with temperature scaling for better optimization
+        scaled_weights = self.attention_weights / self.attention_temperature
+        attention_weights = F.softmax(scaled_weights, dim=0)
         
         # Apply attention
         weighted_lexical = lexical_features * attention_weights[0]

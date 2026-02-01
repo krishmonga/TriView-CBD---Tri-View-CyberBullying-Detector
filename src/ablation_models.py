@@ -12,13 +12,19 @@ from typing import List, Tuple, Dict, Optional
 # FIXED IMPORT: Try multiple ways to import models
 try:
     # First try: Direct import (when running from src directory)
-    from models import EnhancedLexicalView, EnhancedSemanticView, EnhancedStructuralView
-    print("? Imported models directly")
+    from models import (
+        EnhancedLexicalView, EnhancedSemanticView, EnhancedStructuralView,
+        ResidualBlock
+    )
+    print("✓ Imported models and ResidualBlock directly")
 except ImportError:
     try:
         # Second try: Relative import (when imported as module)
-        from .models import EnhancedLexicalView, EnhancedSemanticView, EnhancedStructuralView
-        print("? Imported models relatively")
+        from .models import (
+            EnhancedLexicalView, EnhancedSemanticView, EnhancedStructuralView,
+            ResidualBlock
+        )
+        print("✓ Imported models and ResidualBlock relatively")
     except ImportError:
         try:
             # Third try: Add parent directory to path
@@ -28,10 +34,13 @@ except ImportError:
             parent_dir = os.path.dirname(current_dir)
             sys.path.insert(0, parent_dir)
             sys.path.insert(0, current_dir)
-            from models import EnhancedLexicalView, EnhancedSemanticView, EnhancedStructuralView
-            print("? Imported models with path adjustment")
+            from models import (
+                EnhancedLexicalView, EnhancedSemanticView, EnhancedStructuralView,
+                ResidualBlock
+            )
+            print("✓ Imported models and ResidualBlock with path adjustment")
         except ImportError as e:
-            print(f"? Failed to import models: {e}")
+            print(f"⚠ Failed to import models: {e}")
             print("Creating dummy classes to avoid import error...")
             
             # Create dummy classes if import fails
@@ -44,6 +53,27 @@ except ImportError:
                 def forward(self, x):
                     embedded = self.embedding(x)
                     return self.output(embedded.mean(dim=1))
+            
+            class ResidualBlock(nn.Module):
+                """Fallback ResidualBlock"""
+                def __init__(self, input_dim: int, output_dim: int, dropout_rate: float = 0.3):
+                    super().__init__()
+                    self.use_residual = (input_dim == output_dim)
+                    self.block = nn.Sequential(
+                        nn.Linear(input_dim, output_dim),
+                        nn.LayerNorm(output_dim),
+                        nn.GELU(),
+                        nn.Dropout(dropout_rate),
+                        nn.Linear(output_dim, output_dim),
+                        nn.LayerNorm(output_dim)
+                    )
+                    if not self.use_residual:
+                        self.projection = nn.Linear(input_dim, output_dim)
+                
+                def forward(self, x):
+                    residual = x if self.use_residual else self.projection(x)
+                    output = self.block(x)
+                    return F.gelu(output + residual)
             
             EnhancedLexicalView = DummyView
             EnhancedSemanticView = DummyView
@@ -198,19 +228,27 @@ class NoAttentionTriFuse(nn.Module):
             config=self.config
         )
         
-        # Fusion
+        # Fusion with residual blocks for improved accuracy
         self.fusion = nn.Sequential(
-            nn.Linear(256 * 3, 512),
-            nn.ReLU(),
-            nn.Dropout(self.config.get('dropout_rate', 0.3)),
+            nn.Linear(256 * 3, 1024),
+            nn.LayerNorm(1024),
+            nn.GELU(),
+            nn.Dropout(self.config.get('dropout_rate', 0.3) * 0.8),
+            ResidualBlock(1024, 1024, self.config.get('dropout_rate', 0.3)),
+            nn.Linear(1024, 512),
+            nn.LayerNorm(512),
+            nn.GELU(),
+            nn.Dropout(self.config.get('dropout_rate', 0.3) * 0.8),
+            ResidualBlock(512, 512, self.config.get('dropout_rate', 0.3)),
             nn.Linear(512, 256),
-            nn.ReLU()
+            nn.LayerNorm(256)
         )
         
-        # Classifier
+        # Classifier with layer normalization
         self.classifier = nn.Sequential(
             nn.Linear(256, 128),
-            nn.ReLU(),
+            nn.LayerNorm(128),
+            nn.GELU(),
             nn.Dropout(self.config.get('dropout_rate', 0.3)),
             nn.Linear(128, num_classes)
         )
@@ -225,12 +263,18 @@ class NoAttentionTriFuse(nn.Module):
                 nn.init.xavier_normal_(m.weight)
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
+            elif isinstance(m, nn.LayerNorm):
+                nn.init.ones_(m.weight)
+                nn.init.zeros_(m.bias)
         
         for m in self.classifier.modules():
             if isinstance(m, nn.Linear):
                 nn.init.xavier_normal_(m.weight)
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
+            elif isinstance(m, nn.LayerNorm):
+                nn.init.ones_(m.weight)
+                nn.init.zeros_(m.bias)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass"""
@@ -278,18 +322,20 @@ class TwoViewModel(nn.Module):
             config=self.config
         )
         
-        # Attention
+        # Attention with layer normalization
         self.attention = nn.Sequential(
             nn.Linear(512, 256),
-            nn.Tanh(),
+            nn.LayerNorm(256),
+            nn.GELU(),
             nn.Linear(256, 2),
             nn.Softmax(dim=1)
         )
         
-        # Classifier
+        # Classifier with layer normalization
         self.classifier = nn.Sequential(
             nn.Linear(512, 256),
-            nn.ReLU(),
+            nn.LayerNorm(256),
+            nn.GELU(),
             nn.Dropout(self.config.get('dropout_rate', 0.3)),
             nn.Linear(256, num_classes)
         )
@@ -304,12 +350,18 @@ class TwoViewModel(nn.Module):
                 nn.init.xavier_normal_(m.weight)
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
+            elif isinstance(m, nn.LayerNorm):
+                nn.init.ones_(m.weight)
+                nn.init.zeros_(m.bias)
         
         for m in self.classifier.modules():
             if isinstance(m, nn.Linear):
                 nn.init.xavier_normal_(m.weight)
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
+            elif isinstance(m, nn.LayerNorm):
+                nn.init.ones_(m.weight)
+                nn.init.zeros_(m.bias)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass"""

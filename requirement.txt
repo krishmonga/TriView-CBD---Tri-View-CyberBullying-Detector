@@ -10,6 +10,9 @@ nltk>=3.8.0
 transformers>=4.30.0
 nlpaug>=1.1.11
 
+# Gradient Boosting
+lightgbm>=4.0.0
+
 # Visualization
 matplotlib>=3.7.0
 seaborn>=0.12.0

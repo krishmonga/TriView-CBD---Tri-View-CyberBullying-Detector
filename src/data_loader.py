@@ -41,7 +41,7 @@ class EnhancedTextPreprocessor:
         # Emoji patterns
         self.emoji_patterns = {
             r':\)|:-\)': ' smile ',
-            r':\(|:-\(|:' : ' sad ',
+            r':\(|:-\(': ' sad ',
             r':D|:-D': ' laugh ',
             r':P|:-P': ' tongue ',
             r'<3': ' love ',
@@ -112,12 +112,44 @@ class CyberbullyingDataset:
                         text_col = None
                         label_col = None
                         
-                        for col in df.columns:
-                            col_lower = col.lower()
-                            if 'text' in col_lower or 'tweet' in col_lower or 'content' in col_lower:
-                                text_col = col
-                            elif 'label' in col_lower or 'class' in col_lower or 'target' in col_lower:
-                                label_col = col
+                        lower_map = {col.lower(): col for col in df.columns}
+                        
+                        # Prefer explicit text columns
+                        for key in ['text', 'tweet', 'content']:
+                            if key in lower_map:
+                                text_col = lower_map[key]
+                                break
+                        
+                        # Prefer explicit label columns (avoid ed_label_0/1 when oh_label exists)
+                        if 'oh_label' in lower_map:
+                            label_col = lower_map['oh_label']
+                        else:
+                            for key in ['label', 'class', 'target']:
+                                if key in lower_map:
+                                    label_col = lower_map[key]
+                                    break
+                        
+                        # Fallback: match by substring if still not found
+                        if text_col is None:
+                            for col in df.columns:
+                                col_lower = col.lower()
+                                if 'text' in col_lower or 'tweet' in col_lower or 'content' in col_lower:
+                                    text_col = col
+                                    break
+                        
+                        if label_col is None:
+                            for col in df.columns:
+                                col_lower = col.lower()
+                                if ('label' in col_lower or 'class' in col_lower or 'target' in col_lower) and not col_lower.startswith('ed_label'):
+                                    label_col = col
+                                    break
+                        
+                        if label_col is None:
+                            for col in df.columns:
+                                col_lower = col.lower()
+                                if 'label' in col_lower or 'class' in col_lower or 'target' in col_lower:
+                                    label_col = col
+                                    break
                         
                         if text_col and label_col:
                             df = df.rename(columns={text_col: 'text', label_col: 'label'})
@@ -230,6 +262,8 @@ class CyberbullyingDataset:
         print(f"   Test: {len(X_test)} samples")
         
         return X_train, X_val, X_test, y_train, y_val, y_test
+
+
 class CyberbullyingTorchDataset(Dataset):
     """PyTorch Dataset for cyberbullying data"""
     
