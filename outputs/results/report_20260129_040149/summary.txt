@@ -1,0 +1,39 @@
+======================================================================
+TRI-FUSE CYBERBULLYING DETECTION - EXPERIMENT REPORT
+======================================================================
+
+Report generated: 2026-01-29 04:01:51
+
+MODEL PERFORMANCE SUMMARY:
+----------------------------------------------------------------------
+Model                     Accuracy     F1-Score     Precision    Recall      
+----------------------------------------------------------------------
+Cnn                       0.9593       0.9582       0.9581       0.9593
+Trifuse                   0.9587       0.9578       0.9575       0.9587
+Structural Only           0.9582       0.9574       0.9571       0.9582
+Lexical Only              0.9572       0.9562       0.9559       0.9572
+Bilstm                    0.9571       0.9565       0.9562       0.9571
+No Attention              0.9567       0.9561       0.9557       0.9567
+Semantic Only             0.9257       0.9199       0.9204       0.9257
+
+======================================================================
+KEY FINDINGS:
+======================================================================
+
+1. Best Performing Model: Cnn
+   Accuracy: 0.9593
+
+2. Worst Performing Model: Semantic Only
+   Accuracy: 0.9257
+
+3. ✅ SUCCESS: TriFuse achieved target accuracy of 95%+
+
+======================================================================
+FILES GENERATED:
+======================================================================
+1. results.json - Complete results in JSON format
+2. results.csv - Results in CSV format
+3. training_history.png - Training curves
+4. model_comparison.png - Model comparison chart
+5. latex_tables/ - LaTeX tables for IEEE paper
+6. summary.txt - This summary file

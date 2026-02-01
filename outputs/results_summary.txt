@@ -1,0 +1,41 @@
+============================================================
+TRI-FUSE CYBERBULLYING DETECTION - RESULTS SUMMARY
+============================================================
+
+TEST RESULTS:
+----------------------------------------
+Accuracy: 0.9334
+F1-Score: 0.9299
+Precision: 0.9291
+Recall: 0.9334
+
+Classification Report:
+----------------------------------------
+              precision    recall  f1-score   support
+
+Non-Bullying     0.7774    0.6153    0.6869      7969
+    Bullying     0.9495    0.9762    0.9627     59101
+
+    accuracy                         0.9334     67070
+   macro avg     0.8635    0.7958    0.8248     67070
+weighted avg     0.9291    0.9334    0.9299     67070
+
+
+VIEW CONTRIBUTIONS:
+----------------------------------------
+Lexical: 3.0187
+Semantic: 0.5473
+Structural: 1.1400
+
+TRAINING HISTORY:
+----------------------------------------
+Final Train Loss: 0.0772
+Final Val Loss: 0.2016
+Final Train Acc: 0.9697
+Final Val Acc: 0.9478
+
+MODEL INFORMATION:
+----------------------------------------
+Total Parameters: 5,603,782
+Trainable Parameters: 5,603,782
+Vocabulary Size: 10,002

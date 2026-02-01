@@ -1,0 +1,84 @@
+# ==================== SYSTEM CONFIG ====================
+system:
+  device: auto  # auto, cuda, cpu
+  seed: 42
+  num_workers: 4
+
+# ==================== DATA CONFIG ====================
+data:
+  data_path: '/home/pardeep.g/cyberbullying/trifuse model/krish/dataset/'
+  max_seq_len: 128
+  test_size: 0.15
+  val_size: 0.15
+  min_text_length: 3
+  
+  # Data augmentation
+  use_augmentation: false  # Set to false for simplicity
+  augmentation_prob: 0.3
+
+# ==================== MODEL CONFIG ====================
+# ==================== MODEL CONFIG ====================
+model:
+  # Architecture
+  num_classes: 2
+  embed_dim: 304
+  
+  # FIXED: Correct feature dimensions for YOUR MODEL ARCHITECTURE
+  lexical_features: 512      # NOT 130! CNN produces: 128 filters * 4 filter_sizes = 512
+  semantic_features: 608    # NOT 309! Transformer produces: embed_dim * 2 = 300 * 2 = 600
+  structural_features: 304   # BiLSTM produces: embed_dim = 300
+  
+  # Vocabulary size - IMPORTANT: Check your actual vocabulary!
+  vocab_size: 50000         # Adjust based on your tokenizer
+  
+  # Attention optimization
+  attention_diversity_weight: 0.1
+  attention_entropy_weight: 0.05
+  
+  # Regularization
+  dropout_rate: 0.3
+  
+  # View specific
+  lexical_filters: [2, 3, 4, 5]
+  lexical_num_filters: 128
+  semantic_num_layers: 2
+  structural_bidirectional: true
+  structural_num_layers: 2
+
+# ==================== TRAINING CONFIG ====================
+training:
+  # Hyperparameters
+  batch_size: 32  # Reduced from 64 for memory
+  learning_rate: 0.001  # Increased from 3e-5 for faster convergence
+  weight_decay: 0.0001
+  epochs: 20
+  patience: 10
+  min_delta: 0.001
+  
+  # Loss functions
+  use_focal_loss: true
+  focal_gamma: 2.0
+  focal_alpha: 0.25
+  
+  # Gradient handling
+  gradient_clip: 1.0
+  
+  # Optimization
+  optimizer: 'adamw'
+  scheduler: 'cosine'
+
+# ==================== PATHS ====================
+paths:
+  base_output: '/home/pardeep.g/cyberbullying/trifuse model/krish/outputs/'
+  models_dir: '/home/pardeep.g/cyberbullying/trifuse model/krish/outputs/models/'
+  plots_dir: '/home/pardeep.g/cyberbullying/trifuse model/krish/outputs/plots/'
+  results_dir: '/home/pardeep.g/cyberbullying/trifuse model/krish/outputs/results/'
+  paper_tables_dir: '/home/pardeep.g/cyberbullying/trifuse model/krish/outputs/paper_tables/'
+  logs_dir: '/home/pardeep.g/cyberbullying/trifuse model/krish/outputs/logs/'
+
+# ==================== DEBUGGING FLAGS ====================
+debug:
+  print_shapes: true
+  validate_dimensions: true
+  log_batch_info: false
+  
