@@ -282,6 +282,59 @@ def create_sample_dataset(data_path):
     
     print(f"   Created sample dataset with {len(df)} samples in {data_path}")
 
+def _is_ensemble_model(model):
+    return isinstance(model, (RandomForestEnsemble, LightGBMEnsemble))
+
+def _extract_ensemble_features(model, sequences: torch.Tensor) -> torch.Tensor:
+    """Extract features for RandomForest/LightGBM ensembles"""
+    embedded = model.embedding(sequences)
+
+    if isinstance(model, RandomForestEnsemble):
+        mean_feat = torch.mean(embedded, dim=1)
+        max_feat, _ = torch.max(embedded, dim=1)
+        min_feat, _ = torch.min(embedded, dim=1)
+        std_feat = torch.std(embedded, dim=1)
+        feature_vec = torch.cat([mean_feat, max_feat, min_feat, std_feat], dim=1)
+        return feature_vec
+
+    if isinstance(model, LightGBMEnsemble):
+        first_token = embedded[:, 0, :]
+        last_token = embedded[:, -1, :]
+        mid_token = embedded[:, embedded.shape[1] // 2, :]
+
+        mean_feat = torch.mean(embedded, dim=1)
+        max_feat, _ = torch.max(embedded, dim=1)
+        min_feat, _ = torch.min(embedded, dim=1)
+        std_feat = torch.std(embedded, dim=1)
+
+        feature_vec = torch.cat(
+            [first_token, last_token, mid_token, mean_feat, max_feat, min_feat, std_feat],
+            dim=1
+        )
+        return feature_vec
+
+    raise ValueError("Unsupported ensemble model type")
+
+def _fit_ensemble_model(model, train_loader, device):
+    """Fit RandomForest/LightGBM using extracted features"""
+    all_features = []
+    all_labels = []
+
+    model.eval()
+    with torch.no_grad():
+        for sequences, labels, _ in train_loader:
+            sequences = sequences.to(device)
+            features = _extract_ensemble_features(model, sequences)
+            all_features.append(features.cpu().numpy())
+            all_labels.append(labels.numpy())
+
+    X_train = np.vstack(all_features) if all_features else np.empty((0, model.embed_dim))
+    y_train = np.concatenate(all_labels) if all_labels else np.array([])
+
+    if len(y_train) > 0:
+        model.fit(X_train, y_train)
+    return model
+
 def train_model(model, model_name, train_loader, val_loader, test_loader, config, device, is_sklearn=False):
     """Train and evaluate a model"""
     from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
@@ -290,6 +343,49 @@ def train_model(model, model_name, train_loader, val_loader, test_loader, config
     print(f"Training: {model_name}")
     print('='*60)
     
+    # Handle sklearn-style ensemble models
+    if _is_ensemble_model(model):
+        _fit_ensemble_model(model, train_loader, device)
+
+        def _eval_loader(loader):
+            all_preds = []
+            all_labels = []
+            model.eval()
+            with torch.no_grad():
+                for sequences, labels, _ in loader:
+                    sequences = sequences.to(device)
+                    logits = model(sequences)
+                    preds = torch.argmax(logits, dim=1)
+                    all_preds.extend(preds.cpu().numpy())
+                    all_labels.extend(labels.numpy())
+            return all_labels, all_preds
+
+        val_labels, val_preds = _eval_loader(val_loader)
+        test_labels, test_preds = _eval_loader(test_loader)
+
+        val_acc = accuracy_score(val_labels, val_preds) if len(val_labels) else 0
+        test_acc = accuracy_score(test_labels, test_preds) if len(test_labels) else 0
+        f1 = f1_score(test_labels, test_preds, average='weighted') if len(test_labels) else 0
+        precision = precision_score(test_labels, test_preds, average='weighted') if len(test_labels) else 0
+        recall = recall_score(test_labels, test_preds, average='weighted') if len(test_labels) else 0
+
+        print(f"\n📊 {model_name.upper()} TEST RESULTS:")
+        print(f"   Accuracy:  {test_acc:.4f}")
+        print(f"   F1-Score:  {f1:.4f}")
+        print(f"   Precision: {precision:.4f}")
+        print(f"   Recall:    {recall:.4f}")
+        print("-" * 50)
+
+        return {
+            'accuracy': test_acc,
+            'f1_score': f1,
+            'precision': precision,
+            'recall': recall,
+            'history': {},
+            'predictions': test_preds,
+            'labels': test_labels
+        }
+
     # Optimizer
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -487,6 +583,21 @@ def train_model(model, model_name, train_loader, val_loader, test_loader, config
 
 def kfold_train_model(model, model_name, train_loader, val_loader, config, device):
     """Simplified training for K-fold (no test evaluation)"""
+    if _is_ensemble_model(model):
+        _fit_ensemble_model(model, train_loader, device)
+        model.eval()
+        val_correct = 0
+        val_total = 0
+        with torch.no_grad():
+            for sequences, labels, _ in val_loader:
+                sequences = sequences.to(device)
+                logits = model(sequences)
+                preds = torch.argmax(logits, dim=1)
+                val_correct += (preds.cpu() == labels).sum().item()
+                val_total += labels.size(0)
+        val_acc = val_correct / val_total if val_total > 0 else 0
+        return model, val_acc
+
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=config['training']['learning_rate'],
@@ -628,6 +739,19 @@ def run_kfold_validation(model_name, dataset, vocab_size, config, device, k_fold
                 num_layers=3,
                 num_classes=config['model']['num_classes'],
                 dropout=config['model']['dropout_rate']
+            ).to(device)
+        elif model_name == 'rf':
+            model = RandomForestEnsemble(
+                vocab_size=vocab_size,
+                embed_dim=config['model']['embed_dim'],
+                num_classes=config['model']['num_classes'],
+                n_estimators=config['model'].get('rf_n_estimators', 100)
+            ).to(device)
+        elif model_name == 'lightgbm':
+            model = LightGBMEnsemble(
+                vocab_size=vocab_size,
+                embed_dim=config['model']['embed_dim'],
+                num_classes=config['model']['num_classes']
             ).to(device)
         else:
             # Try ablation model
@@ -789,6 +913,10 @@ def main():
     parser.add_argument('--report', action='store_true', default=True, help='Generate comprehensive report')
     args = parser.parse_args()
     
+    # AUTO K-FOLD FOR TRIFUSE: If model is trifuse and mode is default (full), switch to kfold
+    if args.model == 'trifuse' and args.mode == 'full':
+        args.mode = 'kfold'
+    
     print("\n" + "="*80)
     print("TRI-FUSE CYBERBULLYING DETECTION")
     print("="*80)
@@ -853,9 +981,9 @@ def main():
         if args.model == 'trifuse':
             models_to_test = ['trifuse']
         elif args.model == 'all':
-            models_to_test = ['trifuse', 'bilstm', 'cnn', 'tuned_lstm', 'bert', 'lexical_only', 'semantic_only', 'structural_only']
+            models_to_test = ['trifuse', 'bilstm', 'cnn', 'tuned_lstm', 'bert', 'rf', 'lightgbm', 'lexical_only', 'semantic_only', 'structural_only']
         elif args.model == 'baselines':
-            models_to_test = ['bilstm', 'cnn', 'tuned_lstm', 'bert']
+            models_to_test = ['bilstm', 'cnn', 'tuned_lstm', 'bert', 'rf', 'lightgbm']
         else:
             models_to_test = [args.model]
         
@@ -945,6 +1073,19 @@ def main():
                     num_classes=config['model']['num_classes'],
                     dropout=config['model']['dropout_rate']
                 ).to(device)
+            elif best_model_name == 'rf':
+                final_model = RandomForestEnsemble(
+                    vocab_size=vocab_size,
+                    embed_dim=config['model']['embed_dim'],
+                    num_classes=config['model']['num_classes'],
+                    n_estimators=config['model'].get('rf_n_estimators', 100)
+                ).to(device)
+            elif best_model_name == 'lightgbm':
+                final_model = LightGBMEnsemble(
+                    vocab_size=vocab_size,
+                    embed_dim=config['model']['embed_dim'],
+                    num_classes=config['model']['num_classes']
+                ).to(device)
             else:
                 try:
                     final_model = create_ablation_model(best_model_name, vocab_size, config['model']).to(device)
@@ -1010,6 +1151,21 @@ def main():
                 dropout=config['model']['dropout_rate']
             ).to(device)
             print(f"   Model: Tuned LSTM Baseline")
+        elif args.model == 'rf':
+            model = RandomForestEnsemble(
+                vocab_size=vocab_size,
+                embed_dim=config['model']['embed_dim'],
+                num_classes=config['model']['num_classes'],
+                n_estimators=config['model'].get('rf_n_estimators', 100)
+            ).to(device)
+            print(f"   Model: RandomForest Baseline")
+        elif args.model == 'lightgbm':
+            model = LightGBMEnsemble(
+                vocab_size=vocab_size,
+                embed_dim=config['model']['embed_dim'],
+                num_classes=config['model']['num_classes']
+            ).to(device)
+            print(f"   Model: LightGBM Baseline")
         else:
             # Try ablation model
             try:
@@ -1075,6 +1231,27 @@ def main():
         result = train_model(bert_model, "BERT", train_loader, val_loader, test_loader, config, device)
         results['bert'] = result
         histories['bert'] = result['history']
+
+        # RandomForest Baseline
+        rf_model = RandomForestEnsemble(
+            vocab_size=vocab_size,
+            embed_dim=config['model']['embed_dim'],
+            num_classes=config['model']['num_classes'],
+            n_estimators=config['model'].get('rf_n_estimators', 100)
+        ).to(device)
+        result = train_model(rf_model, "RandomForest", train_loader, val_loader, test_loader, config, device)
+        results['rf'] = result
+        histories['rf'] = result['history']
+
+        # LightGBM Baseline
+        lgb_model = LightGBMEnsemble(
+            vocab_size=vocab_size,
+            embed_dim=config['model']['embed_dim'],
+            num_classes=config['model']['num_classes']
+        ).to(device)
+        result = train_model(lgb_model, "LightGBM", train_loader, val_loader, test_loader, config, device)
+        results['lightgbm'] = result
+        histories['lightgbm'] = result['history']
     
     if args.mode in ['full', 'ablation']:
         print("\n" + "="*60)
