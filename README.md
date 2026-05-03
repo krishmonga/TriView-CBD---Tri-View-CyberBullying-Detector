@@ -99,6 +99,8 @@ For transformer baselines, `model.bert_model_name` controls which encoder is use
 
 For TriFuse, `training.tri_aux_loss_weight` controls how strongly the branch heads are supervised during training. The default is tuned to help TriFuse learn the three views more effectively without changing the baselines.
 
+`training.tri_consistency_loss_weight` adds a training-only branch-agreement regularizer. It does not add inference-time parameters, so the model size stays the same.
+
 
 | Parameter       | Value                      |
 | --------------- | -------------------------- |

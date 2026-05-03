@@ -29,6 +29,7 @@ model:
   dropout_rate: 0.3
   attention_temperature: 1.0
   tri_aux_loss_weight: 0.25
+  tri_consistency_loss_weight: 0.15
   vocab_size: 20000
 
   bert_model_name: 'bert-base-uncased'

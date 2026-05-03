@@ -66,9 +66,19 @@ class FocalLoss(nn.Module):
 
 
 def _trifuse_loss(model, seqs, labels, criterion):
-    logits, aux_logits = model(seqs, return_aux=True)
+    logits, aux_logits, alpha, branch_logits = model(seqs, return_details=True)
     aux_weight = model.aux_loss_weight if hasattr(model, "aux_loss_weight") else 0.25
-    loss = criterion(logits, labels) + aux_weight * criterion(aux_logits, labels)
+    consistency_weight = getattr(model, "consistency_loss_weight", 0.15)
+
+    probs_main = F.softmax(logits, dim=1)
+    probs_branch = F.softmax(branch_logits, dim=2)
+    consistency = ((probs_branch - probs_main.unsqueeze(1)) ** 2).mean()
+
+    loss = (
+        criterion(logits, labels)
+        + aux_weight * criterion(aux_logits, labels)
+        + consistency_weight * consistency
+    )
     return logits, loss
 
 
@@ -98,6 +108,7 @@ def _default_config():
             "transformer_layers": 2, "bilstm_hidden_size": 128,
             "bilstm_num_layers": 2, "fusion_dim": 256,
             "dropout_rate": 0.3, "attention_temperature": 1.0,
+            "tri_aux_loss_weight": 0.25, "tri_consistency_loss_weight": 0.15,
             "bert_model_name": "bert-base-uncased",
             "tuned_lstm_hidden_dim": 256, "tuned_lstm_num_layers": 3,
             "rf_n_estimators": 300, "lgb_n_estimators": 200,
@@ -493,9 +504,17 @@ def run_kfold(model_name, full_dataset, vocab_size, config, device,
                         logits = model(seqs, texts)
                         loss = criterion(logits, labs)
                     elif is_trifuse_kf:
-                        logits, aux_logits = model(seqs, return_aux=True)
+                        logits, aux_logits, alpha, branch_logits = model(seqs, return_details=True)
                         aux_weight = model.aux_loss_weight if hasattr(model, "aux_loss_weight") else 0.25
-                        loss = criterion(logits, labs) + aux_weight * criterion(aux_logits, labs)
+                        consistency_weight = getattr(model, "consistency_loss_weight", 0.15)
+                        probs_main = F.softmax(logits, dim=1)
+                        probs_branch = F.softmax(branch_logits, dim=2)
+                        consistency = ((probs_branch - probs_main.unsqueeze(1)) ** 2).mean()
+                        loss = (
+                            criterion(logits, labs)
+                            + aux_weight * criterion(aux_logits, labs)
+                            + consistency_weight * consistency
+                        )
                     else:
                         logits = model(seqs)
                         loss = criterion(logits, labs)
