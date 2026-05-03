@@ -101,23 +101,23 @@ class TunedLSTMBaseline(nn.Module):
 # ── BERT Baseline (Section V-D) ────────────────────────────────────────
 class BERTBaseline(nn.Module):
     """
-    Fine-tuned bert-base-uncased with a classification head on [CLS].
+    Fine-tuned transformer encoder with a classification head on [CLS].
 
-    BERT uses its own WordPiece tokenizer.  During training, raw texts are
-    passed alongside the integer sequences.  The forward() method accepts
-    EITHER pre-tokenized BERT ids OR falls back to using the shared vocab
-    ids (which degrade BERT quality — this is expected and matches the
-    paper's observation that BERT underperforms on this corpus).
+    The model name is configurable so the same baseline can use full BERT,
+    DistilBERT, or another compatible Hugging Face encoder without changing
+    the training loop. During training, raw texts are passed alongside the
+    integer sequences. The forward() method accepts EITHER pre-tokenized
+    transformer ids OR falls back to using the shared vocab ids.
     """
 
     def __init__(self, num_classes: int = 2, dropout: float = 0.3,
                  model_name: str = "bert-base-uncased", max_len: int = 128):
         super().__init__()
-        from transformers import BertModel, BertTokenizer
-        self.bert = BertModel.from_pretrained(model_name)
-        self.tokenizer = BertTokenizer.from_pretrained(model_name)
+        from transformers import AutoModel, AutoTokenizer
+        self.bert = AutoModel.from_pretrained(model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
         self.max_len = max_len
-        hidden = self.bert.config.hidden_size  # 768
+        hidden = self.bert.config.hidden_size
         self.classifier = nn.Sequential(
             nn.Dropout(dropout),
             nn.Linear(hidden, 256),

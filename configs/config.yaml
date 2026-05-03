@@ -28,6 +28,7 @@ model:
   fusion_dim: 256
   dropout_rate: 0.3
   attention_temperature: 1.0
+  tri_aux_loss_weight: 0.25
   vocab_size: 20000
 
   bert_model_name: 'bert-base-uncased'

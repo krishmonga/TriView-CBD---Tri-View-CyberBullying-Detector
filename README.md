@@ -49,6 +49,9 @@ python main.py --mode kfold --model all --k_folds 5
 # Train a single model
 python main.py --mode single --model trifuse
 
+# Use a lighter transformer baseline
+python main.py --mode single --model bert --bert_model_name distilbert-base-uncased
+
 # Baselines only
 python main.py --mode baseline
 
@@ -69,7 +72,7 @@ python main.py --mode full --data_path dataset_davidson/
 | `bilstm`          | BiLSTM baseline                     |
 | `cnn`             | CNN baseline (Kim 2014)             |
 | `tuned_lstm`      | Tuned unidirectional LSTM           |
-| `bert`            | bert-base-uncased fine-tuned        |
+| `bert`            | Hugging Face transformer baseline   |
 | `rf`              | Random Forest on embedding features |
 | `lightgbm`        | LightGBM on embedding features      |
 | `lexical_only`    | CNN branch ablation                 |
@@ -91,6 +94,10 @@ The Davidson run writes its log to `outputs/davidson_run.log`.
 ## Hyperparameters
 
 See `configs/config.yaml`. Key settings:
+
+For transformer baselines, `model.bert_model_name` controls which encoder is used. Keep `bert-base-uncased` for the full baseline, or switch to a lighter model such as `distilbert-base-uncased` when you want a compact comparison. You can also override it on the command line with `--bert_model_name`.
+
+For TriFuse, `training.tri_aux_loss_weight` controls how strongly the branch heads are supervised during training. The default is tuned to help TriFuse learn the three views more effectively without changing the baselines.
 
 
 | Parameter       | Value                      |

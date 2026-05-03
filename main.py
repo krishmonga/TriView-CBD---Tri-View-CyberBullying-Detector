@@ -65,6 +65,13 @@ class FocalLoss(nn.Module):
         return (self.alpha * (1 - pt) ** self.gamma * ce).mean()
 
 
+def _trifuse_loss(model, seqs, labels, criterion):
+    logits, aux_logits = model(seqs, return_aux=True)
+    aux_weight = model.aux_loss_weight if hasattr(model, "aux_loss_weight") else 0.25
+    loss = criterion(logits, labels) + aux_weight * criterion(aux_logits, labels)
+    return logits, loss
+
+
 # ── Helpers ────────────────────────────────────────────────────────────
 def load_config(path: str = "configs/config.yaml") -> dict:
     abs_path = os.path.join(ROOT, path) if not os.path.isabs(path) else path
@@ -257,6 +264,7 @@ def train_model(model, name, train_loader, val_loader, test_loader,
             eta_min=tc.get("scheduler_eta_min", 1e-6),
         )
     criterion = FocalLoss(tc["focal_gamma"], tc["focal_alpha"])
+    is_trifuse = isinstance(model, TriFuseModel)
 
     best_val, patience_ctr = 0, 0
     history = {"train_loss": [], "val_loss": [], "train_acc": [], "val_acc": [],
@@ -277,8 +285,14 @@ def train_model(model, name, train_loader, val_loader, test_loader,
                 attn_tracker.set_probe_batch(seqs)
             seqs, labels = seqs.to(device), labels.to(device)
             optimizer.zero_grad()
-            logits = model(seqs, texts) if is_bert else model(seqs)
-            loss = criterion(logits, labels)
+            if is_bert:
+                logits = model(seqs, texts)
+                loss = criterion(logits, labels)
+            elif is_trifuse:
+                logits, loss = _trifuse_loss(model, seqs, labels, criterion)
+            else:
+                logits = model(seqs)
+                loss = criterion(logits, labels)
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), tc["gradient_clip"])
             optimizer.step()
@@ -444,6 +458,7 @@ def run_kfold(model_name, full_dataset, vocab_size, config, device,
                                    worker_init_fn=_worker_seed_fn)
 
             is_bert_kf = isinstance(model, BERTBaseline)
+            is_trifuse_kf = isinstance(model, TriFuseModel)
             kf_lr = tc.get("bert_lr", 2e-5) if is_bert_kf else tc["learning_rate"]
             kf_epochs = tc.get("bert_epochs", 4) if is_bert_kf else tc["epochs"]
             kf_patience = tc.get("bert_patience", 4) if is_bert_kf else tc["patience"]
@@ -474,8 +489,16 @@ def run_kfold(model_name, full_dataset, vocab_size, config, device,
                 for seqs, labs, texts in tr_loader:
                     seqs, labs = seqs.to(device), labs.to(device)
                     optimizer.zero_grad()
-                    logits = model(seqs, texts) if is_bert_kf else model(seqs)
-                    loss = criterion(logits, labs)
+                    if is_bert_kf:
+                        logits = model(seqs, texts)
+                        loss = criterion(logits, labs)
+                    elif is_trifuse_kf:
+                        logits, aux_logits = model(seqs, return_aux=True)
+                        aux_weight = model.aux_loss_weight if hasattr(model, "aux_loss_weight") else 0.25
+                        loss = criterion(logits, labs) + aux_weight * criterion(aux_logits, labs)
+                    else:
+                        logits = model(seqs)
+                        loss = criterion(logits, labs)
                     loss.backward()
                     nn.utils.clip_grad_norm_(model.parameters(), tc["gradient_clip"])
                     optimizer.step()
@@ -487,7 +510,10 @@ def run_kfold(model_name, full_dataset, vocab_size, config, device,
                 with torch.no_grad():
                     for seqs, labs, texts in va_loader:
                         seqs, labs = seqs.to(device), labs.to(device)
-                        logits = model(seqs, texts) if is_bert_kf else model(seqs)
+                        if is_bert_kf:
+                            logits = model(seqs, texts)
+                        else:
+                            logits = model(seqs)
                         vc += (logits.argmax(1) == labs).sum().item()
                         vt += labs.size(0)
                 va = vc / vt if vt else 0
@@ -548,12 +574,17 @@ def main():
     parser.add_argument("--quick", action="store_true", help="10-epoch quick run")
     parser.add_argument("--data_path", default=None,
                         help="Override data directory (e.g. dataset_davidson/)")
+    parser.add_argument("--bert_model_name", default=None,
+                        help="Override the transformer baseline backbone (e.g. distilbert-base-uncased)")
     args = parser.parse_args()
 
     config = load_config(args.config)
     if args.data_path:
         config["data"]["data_path"] = args.data_path
         print(f"*** Data path override: {args.data_path} ***")
+    if args.bert_model_name:
+        config["model"]["bert_model_name"] = args.bert_model_name
+        print(f"*** Transformer baseline override: {args.bert_model_name} ***")
     if args.quick:
         config["training"]["epochs"] = 10
         config["training"]["patience"] = 5

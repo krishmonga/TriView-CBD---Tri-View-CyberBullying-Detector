@@ -174,6 +174,7 @@ class TriFuseModel(nn.Module):
         dropout         = cfg.get("dropout_rate", 0.25)
         # Sharper attention (smaller temperature) encourages decisive view weighting
         self.temperature = cfg.get("attention_temperature", 0.5)
+        self.aux_loss_weight = cfg.get("tri_aux_loss_weight", 0.25)
 
         self.lexical_view = LexicalView(
             vocab_size, embed_dim, tuple(filter_sizes), num_filters, fusion_dim, dropout,
@@ -225,7 +226,7 @@ class TriFuseModel(nn.Module):
                 nn.init.ones_(m.weight)
                 nn.init.zeros_(m.bias)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, return_aux: bool = False):
         v_lex = self.lexical_view(x)       # (B, 256)
         v_sem = self.semantic_view(x)      # (B, 256)
         v_str = self.structural_view(x)    # (B, 256)
@@ -252,6 +253,8 @@ class TriFuseModel(nn.Module):
 
         # Combine main logits with auxiliary branch logits (weighted sum)
         final_logits = logits_main + 0.7 * aux_logits
+        if return_aux:
+            return final_logits, aux_logits
         return final_logits           # (B, C)
 
     def get_attention_weights(self, x: torch.Tensor) -> torch.Tensor:
