@@ -1,0 +1,61 @@
+system:
+  device: auto
+  seed: 42
+  num_workers: 4
+
+data:
+  data_path: 'dataset/'
+  max_seq_len: 128
+  test_size: 0.15
+  val_size: 0.15
+  min_text_length: 3
+  glove_path: 'glove.6B.300d.txt'
+  vocab_size: 20000
+  use_augmentation: false
+
+model:
+  num_classes: 2
+  embed_dim: 300
+  num_heads: 4
+  cnn_filter_sizes: [2, 3, 4, 5]
+  cnn_num_filters: 64
+  transformer_layers: 2
+  bilstm_hidden_size: 128
+  bilstm_num_layers: 2
+  fusion_dim: 256
+  dropout_rate: 0.3
+  attention_temperature: 1.0
+  vocab_size: 20000
+
+  bert_model_name: 'bert-base-uncased'
+  tuned_lstm_hidden_dim: 256
+  tuned_lstm_num_layers: 3
+  rf_n_estimators: 300
+  lgb_n_estimators: 200
+
+training:
+  batch_size: 32
+  learning_rate: 0.001
+  weight_decay: 0.01
+  epochs: 100
+  patience: 15
+  min_delta: 0.001
+  use_focal_loss: true
+  focal_gamma: 2.0
+  focal_alpha: 0.25
+  gradient_clip: 1.0
+  optimizer: 'adamw'
+  scheduler: 'cosine'
+  scheduler_T0: 10
+  scheduler_T_mult: 2
+  scheduler_eta_min: 1.0e-6
+  bert_lr: 2.0e-5
+  bert_epochs: 4
+  bert_patience: 4
+
+paths:
+  base_output: 'outputs/'
+  models_dir: 'outputs/models/'
+  plots_dir: 'outputs/plots/'
+  results_dir: 'outputs/results/'
+  logs_dir: 'outputs/logs/'
