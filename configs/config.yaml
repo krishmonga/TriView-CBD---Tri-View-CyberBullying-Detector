@@ -5,6 +5,9 @@ system:
 
 data:
   data_path: 'dataset/'
+  auto_download_shahane: true
+  shahane_dataset_url: ''
+  shahane_kaggle_dataset: 'saurabhshahane/cyberbullying-dataset'
   max_seq_len: 128
   test_size: 0.15
   val_size: 0.15

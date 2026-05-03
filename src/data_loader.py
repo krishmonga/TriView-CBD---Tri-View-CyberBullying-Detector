@@ -18,6 +18,7 @@ Preprocessing (Section III-B):
 
 import os
 import re
+import subprocess
 import zipfile
 import urllib.request
 import pandas as pd
@@ -125,9 +126,90 @@ class CyberbullyingDataset:
     def __init__(self, data_path: str, config: Dict = None):
         self.data_path = data_path
         self.config = config or {}
+        self.data_cfg = self.config.get("data", {}) if isinstance(self.config, dict) else {}
         self.preprocessor = TextPreprocessor()
 
+    def _has_csv_files(self) -> bool:
+        if os.path.isfile(self.data_path) and self.data_path.endswith(".csv"):
+            return True
+        if os.path.isdir(self.data_path):
+            return any(f.endswith(".csv") for f in os.listdir(self.data_path))
+        return False
+
+    def _try_download_from_url(self) -> bool:
+        url = str(self.data_cfg.get("shahane_dataset_url", "")).strip()
+        if not url:
+            return False
+        try:
+            filename = os.path.basename(url.split("?")[0]) or "shahane_dataset.zip"
+            target = os.path.join(self.data_path, filename)
+            print(f"Attempting Shahane dataset download from URL: {url}")
+            urllib.request.urlretrieve(url, target, _dl_progress)
+            print()
+
+            if target.lower().endswith(".zip"):
+                print(f"Extracting {target} ...")
+                with zipfile.ZipFile(target, "r") as zf:
+                    zf.extractall(self.data_path)
+            return self._has_csv_files()
+        except Exception as e:
+            print(f"URL-based dataset download failed: {e}")
+            return False
+
+    def _try_download_from_kaggle(self) -> bool:
+        dataset_id = str(
+            self.data_cfg.get("shahane_kaggle_dataset", "saurabhshahane/cyberbullying-dataset")
+        ).strip()
+        cmd = [
+            "kaggle", "datasets", "download", "-d", dataset_id,
+            "-p", self.data_path, "--unzip",
+        ]
+        try:
+            print(f"Attempting Shahane dataset download via Kaggle: {dataset_id}")
+            proc = subprocess.run(cmd, check=False, capture_output=True, text=True)
+            if proc.returncode != 0:
+                stderr = (proc.stderr or "").strip()
+                stdout = (proc.stdout or "").strip()
+                msg = stderr if stderr else stdout
+                print(f"Kaggle download failed: {msg}")
+                return False
+            return self._has_csv_files()
+        except FileNotFoundError:
+            print("Kaggle CLI not found. Install it with: pip install kaggle")
+            return False
+        except Exception as e:
+            print(f"Kaggle download failed: {e}")
+            return False
+
+    def _ensure_dataset_available(self):
+        if self._has_csv_files():
+            return
+
+        auto_download = bool(self.data_cfg.get("auto_download_shahane", True))
+        path_basename = os.path.basename(os.path.normpath(self.data_path)).lower()
+        if not auto_download or path_basename != "dataset":
+            return
+
+        os.makedirs(self.data_path, exist_ok=True)
+        print(
+            f"No CSV dataset found in {self.data_path}. "
+            "Trying automatic Shahane dataset download ..."
+        )
+
+        if self._try_download_from_url():
+            print("Shahane dataset download succeeded (URL source).")
+            return
+        if self._try_download_from_kaggle():
+            print("Shahane dataset download succeeded (Kaggle source).")
+            return
+
+        print(
+            "Automatic Shahane download failed. "
+            "Place dataset CSV files in dataset/ or set data.shahane_dataset_url in config."
+        )
+
     def load_and_combine(self) -> pd.DataFrame:
+        self._ensure_dataset_available()
         frames: List[pd.DataFrame] = []
 
         paths: List[str] = []
