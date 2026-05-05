@@ -1,0 +1,18 @@
+\begin{table}[htbp]
+\caption{Stratified 5-Fold Cross-Validation Results (Mean $\pm$ Std)}
+\label{tab:cross_val}
+\centering
+\begin{tabular}{|l|c|c|}
+\hline
+Model & Accuracy & F1-score \\
+\hline
+Rf & 93.06 $\pm$ 0.32\% & 92.71 $\pm$ 0.35\% \\
+Lightgbm & 94.58 $\pm$ 0.40\% & 94.82 $\pm$ 0.37\% \\
+Cnn & 95.60 $\pm$ 0.35\% & 95.62 $\pm$ 0.38\% \\
+Bilstm & 95.28 $\pm$ 0.49\% & 95.26 $\pm$ 0.55\% \\
+Tuned Lstm & 95.31 $\pm$ 0.52\% & 95.32 $\pm$ 0.59\% \\
+Bert & 96.48 $\pm$ 0.13\% & 96.49 $\pm$ 0.11\% \\
+\textbf{TriFuse (Proposed)} & 95.37 $\pm$ 0.23\% & 95.41 $\pm$ 0.24\% \\
+\hline
+\end{tabular}
+\end{table}

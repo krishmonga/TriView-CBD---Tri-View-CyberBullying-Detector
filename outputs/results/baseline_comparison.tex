@@ -1,0 +1,26 @@
+\begin{table}[htbp]
+\caption{Baseline Model Comparison}
+\label{tab:baseline_comp}
+\centering
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+Model & Accuracy & Precision & Recall & F1-score \\
+\hline
+Rf & 92.91\% & 92.68\% & 92.91\% & 92.51\% \\
+Lightgbm & 94.73\% & 95.66\% & 94.73\% & 94.96\% \\
+Cnn & 95.90\% & 95.96\% & 95.90\% & 95.93\% \\
+Bilstm & 95.71\% & 96.03\% & 95.71\% & 95.81\% \\
+Tuned Lstm & 95.93\% & 96.01\% & 95.93\% & 95.96\% \\
+Bert & 96.33\% & 96.31\% & 96.33\% & 96.32\% \\
+TriFuse (Proposed) & 95.87\% & 95.96\% & 95.87\% & 95.91\% \\
+Lexical Only & 95.84\% & 95.90\% & 95.84\% & 95.87\% \\
+Semantic Only & 95.46\% & 95.66\% & 95.46\% & 95.53\% \\
+Structural Only & 95.57\% & 95.50\% & 95.57\% & 95.53\% \\
+Lexical Semantic & 95.68\% & 96.02\% & 95.68\% & 95.78\% \\
+Lexical Structural & 95.73\% & 95.79\% & 95.73\% & 95.76\% \\
+Semantic Structural & 95.65\% & 95.93\% & 95.65\% & 95.74\% \\
+No Attention & 96.36\% & 96.41\% & 96.36\% & 96.38\% \\
+Late Fusion & 95.73\% & 95.96\% & 95.73\% & 95.81\% \\
+\hline
+\end{tabular}
+\end{table}
