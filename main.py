@@ -16,7 +16,7 @@ Usage examples
   python main.py --mode full --quick          # 10 epochs for testing
 """
 
-import os, sys, json, argparse, warnings, yaml
+import os, sys, json, argparse, warnings, yaml, gc
 from datetime import datetime
 
 import numpy as np
@@ -65,19 +65,37 @@ class FocalLoss(nn.Module):
         return (self.alpha * (1 - pt) ** self.gamma * ce).mean()
 
 
-def _trifuse_loss(model, seqs, labels, criterion):
-    logits, aux_logits, alpha, branch_logits = model(seqs, return_details=True)
-    aux_weight = model.aux_loss_weight if hasattr(model, "aux_loss_weight") else 0.25
-    consistency_weight = getattr(model, "consistency_loss_weight", 0.15)
+def _trifuse_loss(model, seqs, labels, criterion, texts=None):
+    logits, aux_logits, alpha, branch_logits = model(seqs, texts=texts, return_details=True)
+    aux_weight = model.aux_loss_weight if hasattr(model, "aux_loss_weight") else 0.20
+    consistency_weight = getattr(model, "consistency_loss_weight", 0.10)
+    diversity_weight = getattr(model, "diversity_weight", 0.25)
 
+    # Main classification loss
+    main_loss = criterion(logits, labels)
+
+    # Per-view auxiliary losses (train each view independently)
+    aux_loss = (
+        criterion(branch_logits[:, 0], labels) +
+        criterion(branch_logits[:, 1], labels) +
+        criterion(branch_logits[:, 2], labels)
+    ) / 3.0
+
+    # Consistency: align branch predictions with main predictions
     probs_main = F.softmax(logits, dim=1)
     probs_branch = F.softmax(branch_logits, dim=2)
     consistency = ((probs_branch - probs_main.unsqueeze(1)) ** 2).mean()
 
+    # Diversity regularization: maximize entropy of attention weights
+    entropy = -(alpha * torch.log(alpha + 1e-8)).sum(dim=1).mean()
+    max_entropy = torch.log(torch.tensor(3.0, device=alpha.device))
+    diversity_loss = max_entropy - entropy  # 0 when uniform, positive when collapsed
+
     loss = (
-        criterion(logits, labels)
-        + aux_weight * criterion(aux_logits, labels)
+        main_loss
+        + aux_weight * aux_loss
         + consistency_weight * consistency
+        + diversity_weight * diversity_loss
     )
     return logits, loss
 
@@ -249,17 +267,44 @@ def train_model(model, name, train_loader, val_loader, test_loader,
         return _train_sklearn(model, name, train_loader, test_loader, device, mc)
 
     is_bert = isinstance(model, BERTBaseline)
+    is_trifuse = isinstance(model, TriFuseModel)
     if is_bert:
         lr = tc.get("bert_lr", 2e-5)
         epochs = tc.get("bert_epochs", 4)
         patience = tc.get("bert_patience", 4)
+    elif is_trifuse:
+        lr = tc.get("trifuse_lr", tc["learning_rate"])
+        epochs = tc.get("trifuse_epochs", tc["epochs"])
+        patience = tc.get("trifuse_patience", max(tc["patience"], 20))
     else:
         lr = tc["learning_rate"]
         epochs = tc["epochs"]
         patience = tc["patience"]
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr,
-                                  weight_decay=tc["weight_decay"])
+    if is_trifuse:
+        # Separate param groups: backbone (low LR), cross-view/attn (high LR), base
+        backbone_params = []
+        cross_attn_params = []
+        base_params = []
+        for n, p in model.named_parameters():
+            if not p.requires_grad:
+                continue
+            if "backbone.transformer" in n:
+                backbone_params.append(p)
+            elif "cross_" in n or "attn_proj" in n or "log_temperature" in n:
+                cross_attn_params.append(p)
+            else:
+                base_params.append(p)
+        param_groups = [
+            {"params": base_params, "lr": lr},
+            {"params": cross_attn_params, "lr": lr * 3.0},
+        ]
+        if backbone_params:
+            param_groups.append({"params": backbone_params, "lr": lr * 0.01})
+        optimizer = torch.optim.AdamW(param_groups, weight_decay=tc["weight_decay"])
+    else:
+        optimizer = torch.optim.AdamW(model.parameters(), lr=lr,
+                                      weight_decay=tc["weight_decay"])
     if is_bert:
         total_steps = len(train_loader) * epochs
         warmup_steps = int(total_steps * 0.1)
@@ -268,6 +313,16 @@ def train_model(model, name, train_loader, val_loader, test_loader,
             pct_start=warmup_steps / total_steps,
             anneal_strategy="linear",
         )
+    elif is_trifuse:
+        total_steps = len(train_loader) * epochs
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            optimizer, max_lr=[lr, lr * 3.0] + ([lr * 0.01] if any(
+                "backbone.transformer" in n for n, p in model.named_parameters() if p.requires_grad
+            ) else []),
+            total_steps=total_steps,
+            pct_start=0.05,
+            anneal_strategy="cos",
+        )
     else:
         scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
             optimizer, T_0=tc.get("scheduler_T0", 10),
@@ -275,7 +330,6 @@ def train_model(model, name, train_loader, val_loader, test_loader,
             eta_min=tc.get("scheduler_eta_min", 1e-6),
         )
     criterion = FocalLoss(tc["focal_gamma"], tc["focal_alpha"])
-    is_trifuse = isinstance(model, TriFuseModel)
 
     best_val, patience_ctr = 0, 0
     history = {"train_loss": [], "val_loss": [], "train_acc": [], "val_acc": [],
@@ -300,19 +354,19 @@ def train_model(model, name, train_loader, val_loader, test_loader,
                 logits = model(seqs, texts)
                 loss = criterion(logits, labels)
             elif is_trifuse:
-                logits, loss = _trifuse_loss(model, seqs, labels, criterion)
+                logits, loss = _trifuse_loss(model, seqs, labels, criterion, texts=texts)
             else:
                 logits = model(seqs)
                 loss = criterion(logits, labels)
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), tc["gradient_clip"])
             optimizer.step()
-            if is_bert:
+            if is_bert or is_trifuse:
                 scheduler.step()
             t_loss += loss.item()
             t_correct += (logits.argmax(1) == labels).sum().item()
             t_total += labels.size(0)
-        if not is_bert:
+        if not is_bert and not is_trifuse:
             scheduler.step()
 
         model.eval()
@@ -320,7 +374,12 @@ def train_model(model, name, train_loader, val_loader, test_loader,
         with torch.no_grad():
             for seqs, labels, texts in val_loader:
                 seqs, labels = seqs.to(device), labels.to(device)
-                logits = model(seqs, texts) if is_bert else model(seqs)
+                if is_bert:
+                    logits = model(seqs, texts)
+                elif is_trifuse:
+                    logits = model(seqs, texts=texts)
+                else:
+                    logits = model(seqs)
                 v_loss += criterion(logits, labels).item()
                 v_correct += (logits.argmax(1) == labels).sum().item()
                 v_total += labels.size(0)
@@ -383,10 +442,16 @@ def _evaluate(model, loader, device, is_sklearn=False):
             preds_all.extend(preds)
             labels_all.extend(labels.numpy())
     else:
+        is_trifuse_eval = isinstance(model, TriFuseModel)
         with torch.no_grad():
             for seqs, labels, texts in loader:
                 seqs = seqs.to(device)
-                logits = model(seqs, texts) if is_bert else model(seqs)
+                if is_bert:
+                    logits = model(seqs, texts)
+                elif is_trifuse_eval:
+                    logits = model(seqs, texts=texts)
+                else:
+                    logits = model(seqs)
                 preds_all.extend(logits.argmax(1).cpu().numpy())
                 labels_all.extend(labels.numpy())
 
@@ -470,13 +535,43 @@ def run_kfold(model_name, full_dataset, vocab_size, config, device,
 
             is_bert_kf = isinstance(model, BERTBaseline)
             is_trifuse_kf = isinstance(model, TriFuseModel)
-            kf_lr = tc.get("bert_lr", 2e-5) if is_bert_kf else tc["learning_rate"]
-            kf_epochs = tc.get("bert_epochs", 4) if is_bert_kf else tc["epochs"]
-            kf_patience = tc.get("bert_patience", 4) if is_bert_kf else tc["patience"]
+            if is_bert_kf:
+                kf_lr = tc.get("bert_lr", 2e-5)
+                kf_epochs = tc.get("bert_epochs", 4)
+                kf_patience = tc.get("bert_patience", 4)
+            elif is_trifuse_kf:
+                kf_lr = tc.get("trifuse_lr", tc["learning_rate"])
+                kf_epochs = tc.get("trifuse_epochs", tc["epochs"])
+                kf_patience = tc.get("trifuse_patience", max(tc["patience"], 20))
+            else:
+                kf_lr = tc["learning_rate"]
+                kf_epochs = tc["epochs"]
+                kf_patience = tc["patience"]
 
-            optimizer = torch.optim.AdamW(model.parameters(),
-                                          lr=kf_lr,
-                                          weight_decay=tc["weight_decay"])
+            if is_trifuse_kf:
+                backbone_params = []
+                cross_attn_params = []
+                base_params = []
+                for n, p in model.named_parameters():
+                    if not p.requires_grad:
+                        continue
+                    if "backbone.transformer" in n:
+                        backbone_params.append(p)
+                    elif "cross_" in n or "attn_proj" in n or "log_temperature" in n:
+                        cross_attn_params.append(p)
+                    else:
+                        base_params.append(p)
+                param_groups = [
+                    {"params": base_params, "lr": kf_lr},
+                    {"params": cross_attn_params, "lr": kf_lr * 3.0},
+                ]
+                if backbone_params:
+                    param_groups.append({"params": backbone_params, "lr": kf_lr * 0.01})
+                optimizer = torch.optim.AdamW(param_groups, weight_decay=tc["weight_decay"])
+            else:
+                optimizer = torch.optim.AdamW(model.parameters(),
+                                              lr=kf_lr,
+                                              weight_decay=tc["weight_decay"])
             if is_bert_kf:
                 kf_total_steps = len(tr_loader) * kf_epochs
                 kf_warmup = int(kf_total_steps * 0.1)
@@ -484,6 +579,16 @@ def run_kfold(model_name, full_dataset, vocab_size, config, device,
                     optimizer, max_lr=kf_lr, total_steps=kf_total_steps,
                     pct_start=kf_warmup / max(kf_total_steps, 1),
                     anneal_strategy="linear",
+                )
+            elif is_trifuse_kf:
+                kf_total_steps = len(tr_loader) * kf_epochs
+                kf_scheduler = torch.optim.lr_scheduler.OneCycleLR(
+                    optimizer, max_lr=[kf_lr, kf_lr * 3.0] + ([kf_lr * 0.01] if any(
+                        "backbone.transformer" in n for n, p in model.named_parameters() if p.requires_grad
+                    ) else []),
+                    total_steps=kf_total_steps,
+                    pct_start=0.05,
+                    anneal_strategy="cos",
                 )
             else:
                 kf_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
@@ -504,24 +609,14 @@ def run_kfold(model_name, full_dataset, vocab_size, config, device,
                         logits = model(seqs, texts)
                         loss = criterion(logits, labs)
                     elif is_trifuse_kf:
-                        logits, aux_logits, alpha, branch_logits = model(seqs, return_details=True)
-                        aux_weight = model.aux_loss_weight if hasattr(model, "aux_loss_weight") else 0.25
-                        consistency_weight = getattr(model, "consistency_loss_weight", 0.15)
-                        probs_main = F.softmax(logits, dim=1)
-                        probs_branch = F.softmax(branch_logits, dim=2)
-                        consistency = ((probs_branch - probs_main.unsqueeze(1)) ** 2).mean()
-                        loss = (
-                            criterion(logits, labs)
-                            + aux_weight * criterion(aux_logits, labs)
-                            + consistency_weight * consistency
-                        )
+                        logits, loss = _trifuse_loss(model, seqs, labs, criterion, texts=texts)
                     else:
                         logits = model(seqs)
                         loss = criterion(logits, labs)
                     loss.backward()
                     nn.utils.clip_grad_norm_(model.parameters(), tc["gradient_clip"])
                     optimizer.step()
-                    if is_bert_kf:
+                    if is_bert_kf or is_trifuse_kf:
                         kf_scheduler.step()
 
                 model.eval()
@@ -531,12 +626,14 @@ def run_kfold(model_name, full_dataset, vocab_size, config, device,
                         seqs, labs = seqs.to(device), labs.to(device)
                         if is_bert_kf:
                             logits = model(seqs, texts)
+                        elif is_trifuse_kf:
+                            logits = model(seqs, texts=texts)
                         else:
                             logits = model(seqs)
                         vc += (logits.argmax(1) == labs).sum().item()
                         vt += labs.size(0)
                 va = vc / vt if vt else 0
-                if not is_bert_kf:
+                if not is_bert_kf and not is_trifuse_kf:
                     kf_scheduler.step()
 
                 if va > best_val:
@@ -640,6 +737,12 @@ def main():
         "no_attention", "late_fusion",
     ]
 
+    # Helper to save partial results incrementally
+    def _save_incremental():
+        if all_results or kfold_results:
+            report_path = os.path.join(results_dir, "comprehensive_report.json")
+            create_comprehensive_report(all_results, kfold_results, report_path)
+
     # ── Single-split training ──────────────────────────────────────────
     if args.mode in ("full", "baseline", "single"):
         if args.mode == "single":
@@ -665,6 +768,13 @@ def main():
                     ["Non-Bully", "Bully"], name, plots_dir,
                 )
 
+            # Save incrementally after each model & free memory
+            _save_incremental()
+            del model
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            gc.collect()
+
     # ── Ablation ───────────────────────────────────────────────────────
     if args.mode in ("full", "ablation"):
         for name in ablation_names:
@@ -674,6 +784,11 @@ def main():
             res = train_model(model, name, train_loader, val_loader,
                               test_loader, config, device)
             all_results[name] = res
+            _save_incremental()
+            del model
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            gc.collect()
 
     # ── K-fold CV ──────────────────────────────────────────────────────
     if args.mode in ("full", "kfold"):
@@ -692,6 +807,10 @@ def main():
             res = run_kfold(name, full_ds, vocab_size, config, device,
                             glove_matrix, args.k_folds)
             kfold_results[name] = res
+            _save_incremental()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            gc.collect()
 
         plot_kfold_results(kfold_results, plots_dir)
 
