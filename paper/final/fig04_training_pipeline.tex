@@ -1,0 +1,67 @@
+% Fig. 4 — Experimental training pipeline (IEEE TCSS single-column)
+\resizebox{\columnwidth}{!}{%
+\begin{tikzpicture}[>=Stealth, every node/.style={align=center},
+                    scale=0.28, transform shape]
+
+\tikzset{
+  startstop/.style={ellipse, draw=teal!80, fill=teal!15,
+    thick, minimum width=3.2cm, minimum height=1.6cm, font=\small},
+  endstop/.style={ellipse, draw=green!60, fill=green!20,
+    thick, minimum width=3.2cm, minimum height=1.6cm, font=\small},
+  process/.style={rectangle, rounded corners=4pt, draw=blue!40, fill=blue!8,
+    thick, minimum width=3.4cm, minimum height=1.5cm, text width=3.2cm, font=\small},
+  processpink/.style={rectangle, rounded corners=4pt, draw=purple!50, fill=purple!10,
+    thick, minimum width=3.4cm, minimum height=1.5cm, text width=3.2cm, font=\small},
+  processgreen/.style={rectangle, rounded corners=4pt, draw=green!50, fill=green!10,
+    thick, minimum width=3.4cm, minimum height=1.5cm, text width=3.2cm, font=\small},
+  processgray/.style={rectangle, rounded corners=4pt, draw=gray!50, fill=gray!10,
+    thick, minimum width=3.4cm, minimum height=1.5cm, text width=3.2cm, font=\small},
+  processpeach/.style={rectangle, rounded corners=4pt, draw=orange!40, fill=orange!8,
+    thick, minimum width=3.4cm, minimum height=1.5cm, text width=3.2cm, font=\small},
+  decision/.style={diamond, aspect=2.2, draw=red!30, fill=red!8,
+    thick, text width=2.4cm, inner sep=1pt, font=\small},
+  lossdiamond/.style={diamond, aspect=2.2, draw=gray!50, fill=white,
+    thick, text width=2.4cm, inner sep=1pt, font=\small},
+  arrow/.style={-{Stealth[length=2.2mm]}, thick, gray!70},
+  dashedarrow/.style={-{Stealth[length=2.2mm]}, thick, gray!70, dashed},
+}
+
+\node[startstop] (input) at (0, 0) {Shahane /\\Davidson data};
+\node[process] (split) at (6, 0) {Stratified split\\70/15/15 + 5-fold CV};
+\node[processpink] (forward) at (12, 0) {Forward pass\\TriFuse model};
+\node[process] (predict) at (18, 0) {Class\\prediction};
+
+\draw[arrow] (input) -- (split);
+\draw[arrow] (split) -- (forward);
+\draw[arrow] (forward) -- (predict);
+
+\node[lossdiamond] (loss) at (2, -5.2) {Composite\\loss $\mathcal{L}$};
+\node[processpeach] (focal) at (8, -3.6) {Focal Loss\\$\mathcal{L}_{\mathrm{main}}$};
+\node[processpeach] (aux) at (8, -6.8) {Aux / con / div\\$\mathcal{L}_{\mathrm{aux}},\mathcal{L}_{\mathrm{con}},\mathcal{L}_{\mathrm{div}}$};
+\node[processpink] (backprop) at (14, -5.2) {Back-\\propagation};
+\node[processgreen] (gradclip) at (20, -5.2) {Gradient\\clip ($\tau=1$)};
+\node[processgreen] (adamw) at (26, -5.2) {AdamW\\update};
+
+\draw[arrow] (predict.south) -- ++(0,-1.2) -| (loss.north);
+\draw[arrow] (loss.east) -- ++(1,0) |- (focal.west);
+\draw[arrow] (loss.east) -- ++(1,0) |- (aux.west);
+\draw[arrow] (focal.east) -- ++(1,0) |- (backprop.west);
+\draw[arrow] (aux.east) -- ++(1,0) |- (backprop.west);
+\draw[arrow] (backprop) -- (gradclip);
+\draw[arrow] (gradclip) -- (adamw);
+
+\node[processgreen] (lrsched) at (0, -10.8) {OneCycleLR\\(TriFuse) /\\Cosine (baselines)};
+\node[processgreen] (valid) at (6.5, -10.8) {Validation\\(patience 25)};
+\node[processgray] (metrics) at (12.5, -10.8) {Metrics:\\Acc, Prec, Rec, F1};
+\node[decision] (earlystop) at (19, -10.8) {Early\\stop?};
+\node[endstop] (complete) at (26, -10.8) {Best\\checkpoint};
+
+\draw[arrow] (adamw.south) -- ++(0,-1.8) -| (lrsched.north);
+\draw[arrow] (lrsched) -- (valid);
+\draw[arrow] (valid) -- (metrics);
+\draw[arrow] (metrics) -- (earlystop);
+\draw[arrow] (earlystop) -- (complete);
+\draw[dashedarrow] (earlystop.south) -- ++(0,-1.5) -| (-2.5,-12.8) -- (-2.5,0) -- (input.west);
+
+\end{tikzpicture}%
+}

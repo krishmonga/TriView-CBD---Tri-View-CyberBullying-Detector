@@ -1,0 +1,22 @@
+% Fig. 6 — Single-branch vs. full TriFuse (Table VI data, pgfplots vector)
+\begin{tikzpicture}
+\begin{axis}[
+  trifuse bar,
+  width=\columnwidth,
+  height=0.52\columnwidth,
+  title={Single-Branch vs.\ Full TriFuse Representations},
+  symbolic x coords={Lexical,Semantic,{TriFuse (Full)}},
+  xtick=data,
+  ymin=91.5,
+  ymax=96.5,
+  legend style={at={(0.02,0.98)}, anchor=north west},
+]
+\addplot+[fill=trifuseBlue!85, draw=black!50] coordinates {
+  (Lexical,93.99) (Semantic,92.99) ({TriFuse (Full)},94.32)
+};
+\addplot+[fill=trifuseGreen!85, draw=black!50] coordinates {
+  (Lexical,95.84) (Semantic,95.46) ({TriFuse (Full)},95.87)
+};
+\legend{Dataset~I, Dataset~II}
+\end{axis}
+\end{tikzpicture}

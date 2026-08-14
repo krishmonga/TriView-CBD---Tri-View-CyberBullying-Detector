@@ -1,0 +1,118 @@
+% Fig. 3 — Multi-view branches (a) and attention fusion (b) — merged per reviewer guidance
+\resizebox{\columnwidth}{!}{%
+\begin{tikzpicture}[>=Stealth, every node/.style={align=center},
+                    scale=0.30, transform shape]
+
+\tikzset{
+  embedding/.style={rectangle, rounded corners=4pt, draw=cyan!50, fill=cyan!10,
+    thick, minimum width=12.5cm, minimum height=1.6cm, text width=12.0cm, font=\small},
+  viewlabel/.style={rectangle, rounded corners=4pt, draw=gray!50, fill=gray!8,
+    thick, minimum width=3.8cm, minimum height=1.2cm, font=\small},
+  processorange/.style={rectangle, rounded corners=4pt, draw=orange!50, fill=orange!10,
+    thick, minimum width=3.8cm, minimum height=1.3cm, font=\small},
+  processgreen/.style={rectangle, rounded corners=4pt, draw=green!50, fill=green!10,
+    thick, minimum width=3.8cm, minimum height=1.3cm, font=\small},
+  processpurple/.style={rectangle, rounded corners=4pt, draw=purple!50, fill=purple!10,
+    thick, minimum width=3.8cm, minimum height=1.3cm, font=\small},
+  outputorange/.style={rectangle, rounded corners=10pt, draw=orange!50, fill=orange!10,
+    thick, minimum width=3.8cm, minimum height=1.2cm, font=\small},
+  outputgreen/.style={rectangle, rounded corners=10pt, draw=green!50, fill=green!10,
+    thick, minimum width=3.8cm, minimum height=1.2cm, font=\small},
+  outputpurple/.style={rectangle, rounded corners=10pt, draw=purple!50, fill=purple!10,
+    thick, minimum width=3.8cm, minimum height=1.2cm, font=\small},
+  process/.style={rectangle, rounded corners=4pt, draw=blue!30, fill=blue!8,
+    thick, minimum width=3.6cm, minimum height=1.5cm, font=\small},
+  processpink/.style={rectangle, rounded corners=4pt, draw=purple!50, fill=purple!12,
+    thick, minimum width=3.6cm, minimum height=1.4cm, font=\small},
+  decision/.style={diamond, aspect=2.0, draw=orange!50, fill=orange!10,
+    thick, text width=2.6cm, inner sep=1pt, font=\small},
+  decisionblue/.style={diamond, aspect=2.0, draw=cyan!50, fill=cyan!10,
+    thick, text width=2.6cm, inner sep=1pt, font=\small},
+  groupbox/.style={rectangle, rounded corners=8pt, draw=blue!40, thick, inner sep=10pt},
+  groupboxbeige/.style={rectangle, rounded corners=8pt, draw=orange!30, fill=orange!3,
+    thick, inner sep=10pt},
+  groupboxgreen/.style={rectangle, rounded corners=8pt, draw=green!40, thick, inner sep=10pt},
+  arrow/.style={-{Stealth[length=2.2mm]}, thick, gray!70},
+  curvearrow/.style={-{Stealth[length=2.2mm]}, thick, purple!50},
+  curvearrowg/.style={-{Stealth[length=2.2mm]}, thick, green!50},
+  panellabel/.style={font=\bfseries\small, anchor=north west},
+}
+
+\node[panellabel] at (-0.4, 0.6) {(a) Multi-view feature extraction branches};
+
+\def\colL{0}
+\def\colM{4.3}
+\def\colR{8.6}
+
+\node[embedding] (embed) at (4.3, 0) {Shared token matrix $E \in \mathbb{R}^{128 \times 300}$ from DistilBERT (partial FT) + GloVe fallback for baselines};
+\node[viewlabel] (lexview) at (\colL, -3.2) {Lexical view};
+\node[viewlabel] (semview) at (\colM, -3.2) {Semantic view};
+\node[viewlabel] (strview) at (\colR, -3.2) {Structural view};
+\node[processorange] (conv) at (\colL, -6.2) {Multi-width 1D\\conv ($k\!\in\!\{2,3,4,5\}$)};
+\node[processorange] (maxpool) at (\colL, -9.2) {ReLU +\\max pooling};
+\node[processgreen] (selfattn) at (\colM, -6.2) {Self-attention\\Transformer block};
+\node[processgreen] (transenc) at (\colM, -9.2) {GELU FFN +\\mean/max pool};
+\node[processpurple] (bilstm) at (\colR, -6.2) {BiLSTM over\\token sequence};
+\node[processpurple] (attnmech) at (\colR, -9.2) {Attention over\\time steps};
+\node[outputorange] (vlex) at (\colL, -12.5) {$v_{\mathrm{lex}} \in \mathbb{R}^{256}$};
+\node[outputgreen] (vsem) at (\colM, -12.5) {$v_{\mathrm{sem}} \in \mathbb{R}^{256}$};
+\node[outputpurple] (vstr) at (\colR, -12.5) {$v_{\mathrm{str}} \in \mathbb{R}^{256}$};
+
+\draw[arrow] (embed.south) -- ++(0,-0.6) -| (lexview.north);
+\draw[arrow] (embed.south) -- (semview.north);
+\draw[arrow] (embed.south) -- ++(0,-0.6) -| (strview.north);
+\draw[arrow] (lexview) -- (conv);
+\draw[arrow] (conv) -- (maxpool);
+\draw[arrow] (maxpool) -- (vlex);
+\draw[arrow] (semview) -- (selfattn);
+\draw[arrow] (selfattn) -- (transenc);
+\draw[arrow] (transenc) -- (vsem);
+\draw[arrow] (strview) -- (bilstm);
+\draw[arrow] (bilstm) -- (attnmech);
+\draw[arrow] (attnmech) -- (vstr);
+
+\begin{scope}[yshift=-16.2cm]
+  \node[panellabel] at (-0.4, 0.6) {(b) Attention-based fusion mechanism};
+
+  \node[process] (vlexp) at (0, 0) {$v'_{\mathrm{lex}}$\\{\scriptsize(enriched)}};
+  \node[process] (vsemp) at (6.0, 0) {$v'_{\mathrm{sem}}$\\{\scriptsize(enriched)}};
+  \node[process] (vstrp) at (12.0, 0) {$v'_{\mathrm{str}}$\\{\scriptsize(enriched)}};
+
+  \begin{scope}[on background layer]
+    \node[groupbox, fit=(vlexp)(vsemp)(vstrp),
+      label={[font=\bfseries\footnotesize, text=gray!80]above:CROSS-VIEW ENRICHED REPRESENTATIONS}] (inputbox) {};
+  \end{scope}
+
+  \node[process] (gates) at (6.0, -5.0) {Gate scores\\$g_{\mathrm{lex}}, g_{\mathrm{sem}}, g_{\mathrm{str}}$};
+  \node[decision] (softmax) at (6.0, -8.8) {Temperature softmax\\$\alpha_i=\frac{e^{g_i/T}}{\sum_j e^{g_j/T}}$};
+
+  \begin{scope}[on background layer]
+    \node[groupboxbeige, fit=(gates)(softmax), inner ysep=16pt,
+      label={[font=\bfseries\footnotesize, text=gray!80]above:ATTENTION COMPUTATION}] (attnbox) {};
+  \end{scope}
+
+  \node[processpink] (alex) at (0, -13.5) {$\alpha_{\mathrm{lex}}$};
+  \node[processpink] (asem) at (6.0, -13.5) {$\alpha_{\mathrm{sem}}$};
+  \node[processpink] (astr) at (12.0, -13.5) {$\alpha_{\mathrm{str}}$};
+
+  \begin{scope}[on background layer]
+    \node[groupboxgreen, fit=(alex)(asem)(astr),
+      label={[font=\bfseries\footnotesize, text=gray!80]above:VIEW WEIGHTS}] (weightsbox) {};
+  \end{scope}
+
+  \node[decisionblue] (wfusion) at (6.0, -18.0) {Weighted\\concatenation};
+  \node[processgreen] (vfuse) at (6.0, -21.5) {$v_{\mathrm{fuse}}=[\alpha_{\mathrm{lex}} v'_{\mathrm{lex}};\ldots]$};
+
+  \draw[arrow] (inputbox.south) -- (attnbox.north);
+  \draw[arrow] (gates) -- (softmax);
+  \draw[curvearrow] (softmax.south west) -- (alex.north);
+  \draw[arrow] (softmax.south) -- (asem.north);
+  \draw[curvearrow] (softmax.south east) -- (astr.north);
+  \draw[curvearrowg] (alex.south) .. controls +(0,-1.8) and +(-3,0.8) .. (wfusion.west);
+  \draw[arrow] (asem.south) -- (wfusion.north);
+  \draw[curvearrowg] (astr.south) .. controls +(0,-1.8) and +(3,0.8) .. (wfusion.east);
+  \draw[arrow] (wfusion) -- (vfuse);
+\end{scope}
+
+\end{tikzpicture}%
+}

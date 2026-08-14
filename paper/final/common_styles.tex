@@ -1,0 +1,31 @@
+% Shared TikZ / pgfplots settings for IEEE TCSS TriFuse figures
+\definecolor{trifuseRed}{RGB}{192,57,43}
+\definecolor{trifuseBlue}{RGB}{93,173,226}
+\definecolor{trifuseGreen}{RGB}{88,214,141}
+\definecolor{trifuseOrange}{RGB}{243,156,18}
+\definecolor{trifuseGray}{RGB}{120,120,120}
+
+\pgfplotsset{
+  trifuse bar/.style={
+    ybar,
+    bar width=5.5pt,
+    enlarge x limits=0.12,
+    ymin=85,
+    ymax=97.2,
+    ylabel={Accuracy (\%)},
+    tick align=inside,
+    axis lines*=left,
+    ymajorgrids=true,
+    grid style={gray!25},
+    legend style={
+      font=\scriptsize,
+      fill=white,
+      draw=gray!40,
+      inner sep=2pt,
+      legend columns=1,
+    },
+    tick label style={font=\scriptsize},
+    label style={font=\footnotesize},
+    title style={font=\footnotesize\bfseries},
+  },
+}

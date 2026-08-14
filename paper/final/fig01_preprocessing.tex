@@ -1,0 +1,64 @@
+% Fig. 1 — Text preprocessing pipeline (IEEE TCSS single-column)
+\resizebox{\columnwidth}{!}{%
+\begin{tikzpicture}[>=Stealth, every node/.style={align=center},
+                    scale=0.48, transform shape]
+
+\tikzset{
+  startstop/.style={rectangle, rounded corners=14pt, draw=teal!60, fill=teal!10,
+    thick, minimum width=3.2cm, minimum height=1.3cm, text width=3.0cm, font=\normalsize},
+  processorange/.style={rectangle, rounded corners=4pt, draw=orange!50, fill=orange!10,
+    thick, minimum width=3.2cm, minimum height=1.15cm, text width=3.0cm, font=\small},
+  processblue/.style={rectangle, rounded corners=4pt, draw=blue!40, fill=blue!10,
+    thick, minimum width=3.2cm, minimum height=1.15cm, text width=3.0cm, font=\small},
+  outputgreen/.style={ellipse, draw=green!60, fill=green!15,
+    thick, minimum width=3.2cm, minimum height=1.5cm, text width=3.0cm, font=\small},
+  groupboxorange/.style={rectangle, rounded corners=8pt, draw=orange!40, fill=orange!2,
+    thick, inner sep=12pt},
+  groupboxblue/.style={rectangle, rounded corners=8pt, draw=blue!40, fill=white,
+    thick, inner sep=12pt},
+  arrow/.style={-{Stealth[length=2.2mm]}, thick, gray!70},
+  sectionlabel/.style={font=\bfseries\footnotesize, text=gray!80},
+}
+
+\def\colL{0}
+\def\colR{9.5}
+
+\node[startstop] (rawtext) at (\colL, 0) {Raw Social\\Media Text};
+\node[processorange] (lower) at (\colL, -3.5) {Lowercasing};
+\node[processorange] (urlrepl) at (\colL, -6.5) {URL / @mention\\$\rightarrow$ \texttt{[URL]}, \texttt{[USER]}};
+\node[processorange] (emoji) at (\colL, -9.8) {Emoji $\rightarrow$\\semantic tokens};
+\node[processorange] (repchar) at (\colL, -13.0) {Repeat char\\reduction ($3{+}\!\rightarrow\!2$)};
+\node[processorange] (specchar) at (\colL, -16.2) {Punctuation\\filtering};
+\node[processorange] (whspace) at (\colL, -19.4) {Whitespace\\normalization};
+
+\begin{scope}[on background layer]
+  \node[groupboxorange, fit=(lower)(urlrepl)(emoji)(repchar)(specchar)(whspace),
+    inner ysep=14pt, inner xsep=14pt,
+    label={[sectionlabel]above:TEXT NORMALIZATION (Sec.~III-B)}] (normbox) {};
+\end{scope}
+
+\node[processblue] (token) at (\colR, -4.0) {NLTK\\tokenization};
+\node[processblue] (vocab) at (\colR, -8.0) {Vocabulary\\(top 20{,}000 + specials)};
+\node[processblue] (seqpad) at (\colR, -12.5) {Pad / truncate\\to $L=128$};
+
+\begin{scope}[on background layer]
+  \node[groupboxblue, fit=(token)(vocab)(seqpad),
+    inner ysep=14pt, inner xsep=14pt,
+    label={[sectionlabel]above:TOKEN PROCESSING}] (tokbox) {};
+\end{scope}
+
+\node[outputgreen] (output) at (\colR, -17.5) {Processed sequence\\(Shahane \& Davidson)};
+
+\draw[arrow] (rawtext) -- (lower);
+\draw[arrow] (lower) -- (urlrepl);
+\draw[arrow] (urlrepl) -- (emoji);
+\draw[arrow] (emoji) -- (repchar);
+\draw[arrow] (repchar) -- (specchar);
+\draw[arrow] (specchar) -- (whspace);
+\draw[arrow] (normbox.east) -- (tokbox.west);
+\draw[arrow] (token) -- (vocab);
+\draw[arrow] (vocab) -- (seqpad);
+\draw[arrow] (seqpad) -- (output);
+
+\end{tikzpicture}%
+}

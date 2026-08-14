@@ -1,0 +1,5 @@
+Dear Editor,
+
+Please consider our manuscript on TriFuse for Computers & Electrical Engineering. It presents a multi-view neural architecture for text-based cyberbullying detection with experiments on two benchmark datasets.
+
+Krish Monga, krishmonga21667@gmail.com

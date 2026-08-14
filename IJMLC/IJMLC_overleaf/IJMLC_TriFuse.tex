@@ -1,0 +1,58 @@
+% TriFuse — International Journal of Machine Learning and Cybernetics (IJMLC)
+% Springer Nature submission | Portal: https://www.editorialmanager.com/mlcy/
+%
+% Compile: pdflatex IJMLC_TriFuse.tex && pdflatex IJMLC_TriFuse.tex
+%
+% For official Springer layout: copy sn-jnl.cls into this folder and compile
+% IJMLC_TriFuse_sn.tex instead (see README.md).
+
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.5cm]{geometry}
+
+\input{IJMLC_preamble.tex}
+
+\title{\textbf{Mitigating Cyberbullying with TriFuse: A Multi-View Model Fusing Lexical, Semantic, and Structural Text Features}}
+
+\author{%
+Krish Monga$^{1}$\thanks{E-mail: 231030134@juitsolan.in}\and
+Shivansh Mahajan$^{1}$\thanks{E-mail: 231030073@juitsolan.in}\and
+Pardeep Garg$^{2,*}$\thanks{Corresponding author. E-mail: pardeep.garg@juitsolan.in}\\[0.6em]
+\small $^{1}$Department of Computer Science Engineering \& Information Technology\\
+\small $^{2}$Department of Electronics and Communication Engineering\\
+\small Jaypee University of Information Technology\\
+\small Waknaghat, Solan, H.P.\ 173234, India
+}
+
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Detecting cyberbullying in short social-media posts is difficult because insults, context, and word order all carry signal, and no single encoder captures each equally well. Most existing classifiers pick one route---TF-IDF or bag-of-words features, CNN n-grams, LSTM sequence models, or Transformer context---and ignore the rest. TriFuse learns three text views in parallel: a CNN for local patterns, a Transformer for token context, and a BiLSTM for sequence order, all fed from shared embeddings. Cross-view attention updates each branch, and a fusion layer with learnable temperature sets the branch weights at classification time instead of using fixed concatenation. Tests on the Shahane corpus (Dataset~I, 229,228 posts) and the Davidson hate-speech corpus (Dataset~II, 24,783 tweets), with matched preprocessing, splits, and training settings, give 94.32\% accuracy and 94.12\% F1 on Dataset~I and 95.87\% accuracy and 95.91\% F1 on Dataset~II. TriFuse outperforms Random Forest, LightGBM, CNN, BiLSTM, and Tuned LSTM under both single-split and stratified 5-fold evaluation. Ablations on both datasets show that the full three-branch fusion beats single-view, two-branch, and late-fusion variants.
+\end{abstract}
+
+\noindent\textbf{Keywords:} Cyberbullying detection; Multi-view representation learning; Adaptive fusion; Deep learning; Text classification; Cross-dataset evaluation
+
+\input{IJMLC_body.tex}
+
+\section*{Declarations}
+
+\subsection*{Funding}
+The research was not supported by any external funding.
+
+\subsection*{Competing interests}
+The authors declare that they have no competing interests.
+
+\subsection*{Data availability}
+Dataset~I (Shahane) and Dataset~II (Davidson) are publicly available as cited in the references. No personal data were collected for this study.
+
+\subsection*{Author contribution}
+Krish Monga and Shivansh Mahajan: conceptualization, investigation, methodology, software, validation, writing---original draft. Pardeep Garg: conceptualization, formal analysis, investigation, methodology, resources, supervision, validation, writing---review and editing. All authors read and approved the final manuscript.
+
+\section*{Acknowledgments}
+The authors thank the Department of Computer Science and Engineering and the Department of Electronics and Communication Engineering, Jaypee University of Information Technology, Waknaghat, for laboratory support during this study. Computing time on the JIIT Noida HPC cluster is also acknowledged.
+
+\input{IJMLC_bibliography.tex}
+
+\end{document}

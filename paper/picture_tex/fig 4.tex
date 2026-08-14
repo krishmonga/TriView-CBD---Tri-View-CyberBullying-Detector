@@ -1,0 +1,62 @@
+\begin{tikzpicture}[>=stealth, every node/.style={align=center},
+                    scale=0.42, transform shape]
+
+\tikzstyle{process}      = [rectangle, rounded corners=4pt, draw=blue!30, fill=blue!8,
+                             thick, minimum width=3.6cm, minimum height=1.5cm, font=\small]
+\tikzstyle{processpink}  = [rectangle, rounded corners=4pt, draw=purple!50, fill=purple!12,
+                             thick, minimum width=3.6cm, minimum height=1.4cm, font=\small]
+\tikzstyle{processgreen} = [rectangle, rounded corners=4pt, draw=green!50, fill=green!12,
+                             thick, minimum width=3.6cm, minimum height=1.4cm, font=\small]
+\tikzstyle{decision}     = [diamond, aspect=2.0, draw=orange!50, fill=orange!10,
+                             thick, text width=2.6cm, inner sep=1pt, font=\small]
+\tikzstyle{decisionblue} = [diamond, aspect=2.0, draw=cyan!50, fill=cyan!10,
+                             thick, text width=2.6cm, inner sep=1pt, font=\small]
+\tikzstyle{groupbox}     = [rectangle, rounded corners=8pt, draw=blue!40, thick, inner sep=10pt]
+\tikzstyle{groupboxbeige}= [rectangle, rounded corners=8pt, draw=orange!30, fill=orange!3,
+                             thick, inner sep=10pt]
+\tikzstyle{groupboxgreen}= [rectangle, rounded corners=8pt, draw=green!40, thick, inner sep=10pt]
+\tikzstyle{arrow}        = [->, >=stealth, thick, gray!70]
+\tikzstyle{curvearrow}   = [->, >=stealth, thick, purple!50]
+\tikzstyle{curvearrowg}  = [->, >=stealth, thick, green!50]
+\tikzstyle{sectionlabel} = [font=\bfseries\footnotesize, text=gray!80]
+
+\node[process]  (vlex)  at (0,    0) {$v'_{\mathrm{lex}}$\\{\scriptsize(enriched)}};
+\node[process]  (vsem)  at (6.0,  0) {$v'_{\mathrm{sem}}$\\{\scriptsize(enriched)}};
+\node[process]  (vstr)  at (12.0, 0) {$v'_{\mathrm{str}}$\\{\scriptsize(enriched)}};
+
+\begin{scope}[on background layer]
+\node[groupbox, fit=(vlex)(vsem)(vstr),
+      label={[sectionlabel]above:CROSS-VIEW ENRICHED REPRESENTATIONS}] (inputbox) {};
+\end{scope}
+
+\node[process]   (gates)   at (6.0, -5.0) {Gate scores\\$g_{\mathrm{lex}}, g_{\mathrm{sem}}, g_{\mathrm{str}}$};
+\node[decision]  (softmax) at (6.0, -8.8) {Temperature softmax\\$\alpha_i=\frac{e^{g_i/T}}{\sum_j e^{g_j/T}}$};
+
+\begin{scope}[on background layer]
+\node[groupboxbeige, fit=(gates)(softmax), inner ysep=16pt,
+      label={[sectionlabel]above:ATTENTION COMPUTATION}] (attnbox) {};
+\end{scope}
+
+\node[processpink] (alex) at (0,    -13.5) {$\alpha_{\mathrm{lex}}$};
+\node[processpink] (asem) at (6.0,  -13.5) {$\alpha_{\mathrm{sem}}$};
+\node[processpink] (astr) at (12.0, -13.5) {$\alpha_{\mathrm{str}}$};
+
+\begin{scope}[on background layer]
+\node[groupboxgreen, fit=(alex)(asem)(astr),
+      label={[sectionlabel]above:VIEW WEIGHTS}] (weightsbox) {};
+\end{scope}
+
+\node[decisionblue] (wfusion) at (6.0, -18.0) {Weighted\\concatenation};
+\node[processgreen] (vfuse)   at (6.0, -21.5) {$v_{\mathrm{fuse}}=[\alpha_{\mathrm{lex}} v'_{\mathrm{lex}};\ldots]$};
+
+\draw[arrow] (inputbox.south) -- (attnbox.north);
+\draw[arrow] (gates) -- (softmax);
+\draw[curvearrow] (softmax.south west) -- (alex.north);
+\draw[arrow]      (softmax.south)      -- (asem.north);
+\draw[curvearrow] (softmax.south east) -- (astr.north);
+\draw[curvearrowg] (alex.south) .. controls +(0,-1.8) and +(-3,0.8) .. (wfusion.west);
+\draw[arrow]       (asem.south) -- (wfusion.north);
+\draw[curvearrowg] (astr.south) .. controls +(0,-1.8) and +(3,0.8)  .. (wfusion.east);
+\draw[arrow] (wfusion) -- (vfuse);
+
+\end{tikzpicture}

@@ -1,0 +1,51 @@
+% TriFuse — IJMLC official Springer Nature template (requires sn-jnl.cls)
+% Download sn-jnl.cls from https://www.springernature.com/gp/authors/campaigns/latex-author-support
+% Compile: pdflatex IJMLC_TriFuse_sn.tex && pdflatex IJMLC_TriFuse_sn.tex
+
+\documentclass[pdflatex,sn-mathphys-num]{sn-jnl}
+
+\input{IJMLC_preamble.tex}
+
+\jyear{2026}
+\journalname{International Journal of Machine Learning and Cybernetics}
+
+\begin{document}
+
+\title[TriFuse multi-view cyberbullying detection]{Mitigating Cyberbullying with TriFuse: A Multi-View Model Fusing Lexical, Semantic, and Structural Text Features}
+
+\author*[1]{\fnm{Krish}\sur{Monga}}\email{231030134@juitsolan.in}
+\author[1]{\fnm{Shivansh}\sur{Mahajan}}\email{231030073@juitsolan.in}
+\author*[2]{\fnm{Pardeep}\sur{Garg}}\email{pardeep.garg@juitsolan.in}
+
+\affil[1]{\orgdiv{Department of Computer Science Engineering \& Information Technology}, \orgname{Jaypee University of Information Technology}, \orgaddress{\street{Waknaghat}, \city{Solan}, \postcode{173234}, \state{H.P.}, \country{India}}}
+
+\affil[2]{\orgdiv{Department of Electronics and Communication Engineering}, \orgname{Jaypee University of Information Technology}, \orgaddress{\street{Waknaghat}, \city{Solan}, \postcode{173234}, \state{H.P.}, \country{India}}}
+
+\abstract{Detecting cyberbullying in short social-media posts is difficult because insults, context, and word order all carry signal, and no single encoder captures each equally well. Most existing classifiers pick one route---TF-IDF or bag-of-words features, CNN n-grams, LSTM sequence models, or Transformer context---and ignore the rest. TriFuse learns three text views in parallel: a CNN for local patterns, a Transformer for token context, and a BiLSTM for sequence order, all fed from shared embeddings. Cross-view attention updates each branch, and a fusion layer with learnable temperature sets the branch weights at classification time instead of using fixed concatenation. Tests on the Shahane corpus (Dataset~I, 229,228 posts) and the Davidson hate-speech corpus (Dataset~II, 24,783 tweets), with matched preprocessing, splits, and training settings, give 94.32\% accuracy and 94.12\% F1 on Dataset~I and 95.87\% accuracy and 95.91\% F1 on Dataset~II. TriFuse outperforms Random Forest, LightGBM, CNN, BiLSTM, and Tuned LSTM under both single-split and stratified 5-fold evaluation. Ablations on both datasets show that the full three-branch fusion beats single-view, two-branch, and late-fusion variants.}
+
+\keywords{Cyberbullying detection, Multi-view representation learning, Adaptive fusion, Deep learning, Text classification, Cross-dataset evaluation}
+
+\maketitle
+
+\input{IJMLC_body.tex}
+
+\section*{Declarations}
+
+\subsection*{Funding}
+The research was not supported by any external funding.
+
+\subsection*{Competing interests}
+The authors declare that they have no competing interests.
+
+\subsection*{Data availability}
+Dataset~I (Shahane) and Dataset~II (Davidson) are publicly available as cited in the references. No personal data were collected for this study.
+
+\subsection*{Author contribution}
+Krish Monga and Shivansh Mahajan: conceptualization, investigation, methodology, software, validation, writing---original draft. Pardeep Garg: conceptualization, formal analysis, investigation, methodology, resources, supervision, validation, writing---review and editing. All authors read and approved the final manuscript.
+
+\section*{Acknowledgments}
+The authors thank the Department of Computer Science and Engineering and the Department of Electronics and Communication Engineering, Jaypee University of Information Technology, Waknaghat, for laboratory support during this study. Computing time on the JIIT Noida HPC cluster is also acknowledged.
+
+\input{IJMLC_bibliography.tex}
+
+\end{document}

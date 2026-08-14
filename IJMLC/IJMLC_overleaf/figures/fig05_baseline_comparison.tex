@@ -1,0 +1,18 @@
+% Fig. 5 — Sec. VII: Baseline comparison (Table IV)
+\begin{tikzpicture}
+\begin{axis}[
+  trifuse bar baseline,
+  width=\columnwidth,
+  height=4.5cm,
+  symbolic x coords={RF,LGBM,CNN,BiLSTM,{T-LSTM},TriFuse},
+  xtick=data,
+]
+\addplot+[fill=trifuseDSone!75, draw=black!50, every node near coord/.append style={xshift=-3pt}] coordinates {
+  (RF,92.28) (LGBM,87.88) (CNN,93.93) (BiLSTM,94.28) ({T-LSTM},94.18) (TriFuse,94.32)
+};
+\addplot+[fill=trifuseDStwo!75, draw=black!50, every node near coord/.append style={xshift=3pt}] coordinates {
+  (RF,92.91) (LGBM,94.73) (CNN,95.82) (BiLSTM,95.71) ({T-LSTM},95.84) (TriFuse,95.87)
+};
+\legend{Dataset~I (Shahane), Dataset~II (Davidson)}
+\end{axis}
+\end{tikzpicture}

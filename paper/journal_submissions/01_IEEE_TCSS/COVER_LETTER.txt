@@ -1,0 +1,34 @@
+[Date: June 2, 2026]
+
+Editor-in-Chief
+IEEE Transactions on Computational Social Systems
+
+Dear Editor,
+
+We submit the manuscript entitled "Mitigating Cyberbullying with TriFuse: A Multi-View Model Fusing Lexical, Semantic, and Structural Text Features" for consideration as a regular paper in IEEE Transactions on Computational Social Systems.
+
+Online harassment remains a central problem for computational social systems: platforms must moderate user-generated content at scale while preserving fair treatment of benign speech. Existing detectors often rely on a single text representation and therefore miss complementary lexical, semantic, and structural cues in abusive posts. This paper introduces TriFuse, an end-to-end multi-view classifier that jointly trains CNN, Transformer, and BiLSTM branches with cross-view interaction and attention-based representation fusion—rather than late ensemble voting.
+
+The manuscript makes five contributions relevant to TCSS readers:
+1. A unified multi-view architecture for text-based cyberbullying detection.
+2. A representation-level fusion scheme with temperature-scaled attention weighting.
+3. A dual-corpus evaluation protocol on the Shahane multi-platform corpus (229,228 prepared instances) and the Davidson hate-speech benchmark (24,783 instances), with matched preprocessing, splits, and training budgets.
+4. A systematic ablation study isolating branch-level, pairwise, and late-fusion configurations on both datasets.
+5. A reproducible experimental protocol with fixed splits (seed 42), public corpora, and released source code.
+
+Results show consistent improvements over strong classical and neural baselines on both corpora, with cross-validated accuracy of 94.29 ± 0.13% (Dataset I) and 95.37 ± 0.23% (Dataset II). We discuss limitations transparently, including incremental gains, English-only binary classification scope, and the need for paired significance testing against large-scale pre-trained encoders under the same protocol. The work complements recent TCSS-oriented cyberbullying research on hybrid Transformer features (e.g., ref. [16] in the manuscript).
+
+This work has not been published elsewhere and is not under consideration by another journal. All authors have approved the manuscript and agree with its submission to IEEE TCSS. Source code and reproduction instructions are provided in the accompanying TriView-CBD repository.
+
+Thank you for your consideration.
+
+Sincerely,
+
+Krish Monga (First Author)
+Dept. of Computer Science and Engineering
+Jaypee University of Information Technology
+Waknaghat, Solan, H.P. 173234, India
+E-mail: krishmonga21667@gmail.com
+
+On behalf of all authors:
+Krish Monga, Shivansh Mahajan, and Pardeep Garg

@@ -1,0 +1,95 @@
+% Fig. 2 — TriFuse end-to-end architecture (IEEE TCSS single-column)
+\resizebox{\columnwidth}{!}{%
+\begin{tikzpicture}[>=Stealth, every node/.style={align=center},
+                    scale=0.38, transform shape]
+
+\tikzset{
+  inputnode/.style={rectangle, rounded corners=8pt, draw=blue!40, fill=blue!8,
+    thick, minimum width=2.6cm, minimum height=1.0cm, text width=2.4cm, font=\small},
+  process/.style={rectangle, rounded corners=4pt, draw=gray!50, fill=white,
+    thick, minimum width=2.6cm, minimum height=1.0cm, text width=2.4cm, font=\small},
+  processblue/.style={rectangle, rounded corners=4pt, draw=blue!40, fill=blue!8,
+    thick, minimum width=2.4cm, minimum height=1.0cm, text width=2.2cm, font=\small},
+  processorange/.style={rectangle, rounded corners=4pt, draw=orange!50, fill=orange!8,
+    thick, minimum width=2.4cm, minimum height=1.0cm, text width=2.2cm, font=\small},
+  processpurple/.style={rectangle, rounded corners=4pt, draw=purple!50, fill=purple!8,
+    thick, minimum width=2.4cm, minimum height=1.0cm, text width=2.2cm, font=\small},
+  processcyan/.style={rectangle, rounded corners=4pt, draw=cyan!60, fill=cyan!8,
+    thick, minimum width=2.8cm, minimum height=1.0cm, text width=2.6cm, font=\small},
+  fusionnode/.style={rectangle, rounded corners=4pt, draw=teal!60, fill=teal!10,
+    thick, minimum width=3.0cm, minimum height=1.0cm, text width=2.8cm, font=\small},
+  outputnode/.style={rectangle, rounded corners=8pt, draw=red!50, fill=red!8,
+    thick, minimum width=2.8cm, minimum height=1.0cm, text width=2.6cm, font=\small},
+  outputlabel/.style={rectangle, rounded corners=4pt, draw=green!40, fill=green!6,
+    thick, minimum width=1.2cm, minimum height=0.75cm, font=\scriptsize},
+  encoderbox/.style={rectangle, rounded corners=5pt, draw=blue!30, fill=white, thick, inner sep=4pt},
+  mvrlbox/.style={rectangle, rounded corners=6pt, draw=gray!40, fill=orange!2, thick, inner sep=5pt},
+  arrow/.style={-{Stealth[length=2.2mm]}, thick, gray!70},
+  sectionlabel/.style={font=\bfseries\scriptsize, text=gray!80},
+}
+
+\node[inputnode] (input) at (0, 2.2) {Input $X$\\($L=128$ tokens)};
+\node[process] (preproc) at (0, -1.5) {Preprocessing\\(Sec.~III)};
+\node[processcyan] (distil) at (0, -5.5) {DistilBERT\\{\scriptsize(last block FT)}};
+\node[processcyan] (proj) at (0, -9.0) {MLP projection\\to $E\in\mathbb{R}^{128\times300}$};
+
+\draw[arrow] (input) -- (preproc);
+\draw[arrow] (preproc) -- (distil);
+\draw[arrow] (distil) -- (proj);
+
+\node[processorange] (cnn) at (4.2, 2.2) {1D CNN\\{\scriptsize $k\!\in\!\{2,3,4,5\}$}};
+\node[processorange] (relu) at (7.2, 2.2) {ReLU +\\max pool};
+\node[outputlabel] (vlex) at (9.8, 2.2) {$v_{\mathrm{lex}}$};
+\draw[arrow] (cnn) -- (relu); \draw[arrow] (relu) -- (vlex);
+\begin{scope}[on background layer]
+  \node[encoderbox, fit=(cnn)(relu)(vlex), inner ysep=5pt,
+    label={[sectionlabel]above:LEXICAL (CNN)}] (lexbox) {};
+\end{scope}
+
+\node[processblue] (transenc) at (4.2, -1.5) {Transformer\\encoder};
+\node[processblue] (meanmax) at (7.2, -1.5) {Mean/max\\pool};
+\node[outputlabel] (vsem) at (9.8, -1.5) {$v_{\mathrm{sem}}$};
+\draw[arrow] (transenc) -- (meanmax); \draw[arrow] (meanmax) -- (vsem);
+\begin{scope}[on background layer]
+  \node[encoderbox, fit=(transenc)(meanmax)(vsem), inner ysep=5pt,
+    label={[sectionlabel]above:SEMANTIC}] (sembox) {};
+\end{scope}
+
+\node[processpurple] (bilstm) at (4.2, -5.5) {BiLSTM};
+\node[processpurple] (attnpool) at (7.2, -5.5) {Attention\\pool};
+\node[outputlabel] (vstr) at (9.8, -5.5) {$v_{\mathrm{str}}$};
+\draw[arrow] (bilstm) -- (attnpool); \draw[arrow] (attnpool) -- (vstr);
+\begin{scope}[on background layer]
+  \node[encoderbox, fit=(bilstm)(attnpool)(vstr), inner ysep=5pt,
+    label={[sectionlabel]above:STRUCTURAL (BiLSTM)}] (strbox) {};
+\end{scope}
+
+\begin{scope}[on background layer]
+  \node[mvrlbox, fit=(lexbox)(sembox)(strbox), inner sep=5pt,
+    label={[sectionlabel]above:MULTI-VIEW ENCODERS}] (mvrl) {};
+\end{scope}
+
+\draw[arrow] (proj.east) -- ++(0.6,0) |- (mvrl.west);
+
+\node[fusionnode] (crossview) at (13.2, -1.5) {Cross-view\\interaction\\{\scriptsize(multi-head attn)}};
+\node[fusionnode] (fusion) at (16.8, -1.5) {Temperature-scaled\\attention fusion\\{\scriptsize $\alpha_{\mathrm{lex}},\alpha_{\mathrm{sem}},\alpha_{\mathrm{str}}$}};
+\node[process] (fc) at (16.8, -5.5) {FC + dropout\\{\scriptsize($v_{\mathrm{fuse}}$)}};
+\node[process] (classif) at (16.8, -8.8) {Softmax\\classifier};
+\node[outputnode] (output) at (16.8, -12.2) {Abusive /\\Non-abusive};
+
+\draw[arrow] (vlex.east) -- ++(0.2,0) |- (crossview.north);
+\draw[arrow] (vsem.east) -- (crossview.west);
+\draw[arrow] (vstr.east) -- ++(0.2,0) |- (crossview.south);
+\draw[arrow] (crossview) -- (fusion);
+\draw[arrow] (fusion) -- (fc);
+\draw[arrow] (fc) -- (classif);
+\draw[arrow] (classif) -- (output);
+
+\node[font=\scriptsize, text=gray!70, align=left] at (8.5, -11.8)
+  {$\mathcal{L}=\mathcal{L}_{\mathrm{main}}+\lambda_{\mathrm{aux}}\mathcal{L}_{\mathrm{aux}}+\lambda_{\mathrm{con}}\mathcal{L}_{\mathrm{con}}+\lambda_{\mathrm{div}}\mathcal{L}_{\mathrm{div}}$\\{\scriptsize Focal Loss + branch supervision}};
+
+\node[font=\small\bfseries, text=gray!80] at (8.5, 4.2)
+  {TriFuse: Multi-View Cyberbullying Detector};
+
+\end{tikzpicture}%
+}

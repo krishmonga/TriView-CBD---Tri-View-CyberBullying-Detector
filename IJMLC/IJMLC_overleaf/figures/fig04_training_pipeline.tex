@@ -1,0 +1,104 @@
+% Fig. 4 — Sec. VI: Experimental training and evaluation pipeline (redesigned)
+\resizebox{\columnwidth}{!}{%
+\begin{tikzpicture}[
+  >=Stealth,
+  every node/.style={align=center},
+  arr/.style={-{Stealth[length=2.4mm]}, line width=0.95pt, gray!55},
+  loop/.style={arr, dashed, gray!45},
+  ph/.style={rectangle, rounded corners=3pt, fill=#1!55, text=black,
+    font=\bfseries\scriptsize, minimum width=0.72cm, minimum height=0.62cm},
+  blk/.style={rectangle, rounded corners=5pt, draw=#1!60, fill=#1!9, thick,
+    font=\footnotesize, minimum height=0.92cm},
+  wide/.style={blk=#1, minimum width=10.9cm, text width=10.6cm},
+  half/.style={blk=#1, minimum width=5.25cm, text width=5.0cm},
+  sm/.style={blk=#1, minimum width=3.35cm, text width=3.1cm, font=\scriptsize,
+    minimum height=0.82cm},
+  sect/.style={font=\bfseries\footnotesize, text=gray!45},
+]
+
+% Phase labels (left margin)
+\node[sect, anchor=east] at (-0.05, 5.55) {A.\ Data};
+\node[sect, anchor=east] at (-0.05, 3.85) {B.\ Split};
+\node[sect, anchor=east] at (-0.05, 2.15) {C.\ Models};
+\node[sect, anchor=east] at (-0.05, 0.45) {D.\ Train};
+\node[sect, anchor=east] at (-0.05, -1.55) {E.\ Eval};
+
+% ===== Phase A =====
+\node[ph=trifuseBlue] (pa) at (0.55, 5.55) {A};
+\node[wide=trifuseBlue] (data) at (5.45, 5.55) {%
+  \textbf{Public corpora}\quad
+  Dataset~I Shahane (229,228) \textbar\ Dataset~II Davidson (24,783) \quad
+  binary labels: abusive / non-abusive};
+
+% ===== Phase B =====
+\node[ph=trifuseBlue] (pb) at (0.55, 3.85) {B};
+\node[half=trifuseBlue] (split) at (2.95, 3.85) {%
+  \textbf{Stratified split}\\
+  70\% train / 15\% val / 15\% test\\
+  seed 42 + 5-fold CV};
+\node[half=trifuseBlue] (enc) at (8.35, 3.85) {%
+  \textbf{Encoding pipeline}\\
+  Preprocessing (Fig.~1)\\
+  vocab 20k, $L{=}128$, indices};
+
+% ===== Phase C =====
+\node[ph=trifuseOrange] (pc) at (0.55, 2.15) {C};
+\node[wide=trifuseOrange] (models) at (5.45, 2.15) {%
+  \textbf{Compared models}\quad
+  \textbf{TriFuse (proposed)} \textbar\ RF \textbar\ LightGBM \textbar\
+  CNN \textbar\ BiLSTM \textbar\ Tuned LSTM};
+
+% ===== Phase D =====
+\node[ph=trifuseGreen] (pd) at (0.55, 0.45) {D};
+\node[sm=trifuseGreen] (focal) at (2.15, 0.45) {%
+  \textbf{Focal Loss}\\
+  $\gamma{=}2.0$, $\alpha{=}0.25$};
+\node[sm=trifuseGreen] (opt) at (5.45, 0.45) {%
+  \textbf{AdamW}\\
+  grad clip $\tau{=}1.0$};
+\node[sm=trifuseGreen] (sched) at (8.75, 0.45) {%
+  \textbf{LR schedule}\\
+  cosine / OneCycleLR};
+\node[sm=trifuseGreen] (stop) at (5.45, -0.65) {%
+  \textbf{Early stopping}\\
+  patience 15 (baselines) / 25 (TriFuse)};
+
+\node[wide=trifuseGreen, minimum height=0.82cm, font=\scriptsize] (cfg) at (5.45, -1.55) {%
+  Batch size 16 \textbullet\ max 100 epochs \textbullet\ dropout 0.3 \textbullet\
+  PyTorch + GPU \textbullet\ TriFuse LR $5\!\times\!10^{-4}$, \texttt{distilbert-base-uncased}};
+
+% ===== Phase E =====
+\node[ph=trifuseRed] (pe) at (0.55, -2.85) {E};
+\node[half=trifuseRed] (val) at (2.95, -2.85) {%
+  \textbf{Validation monitoring}\\
+  select best checkpoint};
+\node[half=trifuseRed] (met) at (8.35, -2.85) {%
+  \textbf{Test metrics}\\
+  Accuracy, Precision, Recall, F1};
+
+% ===== Output =====
+\node[rectangle, rounded corners=5pt, draw=trifuseRed!65, fill=trifuseRed!10, thick,
+  minimum width=10.9cm, minimum height=0.88cm, font=\footnotesize\bfseries] (out) at (5.45, -4.15) {%
+  Reported results: single-split test + stratified 5-fold mean\,$\pm$\,std};
+
+% ===== Arrows =====
+\draw[arr] (data.south) -- (split.north);
+\draw[arr] (data.south) -- (enc.north);
+\draw[arr] (split.south) -- (models.north);
+\draw[arr] (enc.south) -- (models.north);
+\draw[arr] (models.south) -- (focal.north);
+\draw[arr] (focal.south) -- ++(0,-0.35) -| (stop.north west);
+\draw[arr] (opt.south) -- (stop.north);
+\draw[arr] (sched.south) -- ++(0,-0.35) -| (stop.north east);
+\draw[arr] (stop.south) -- (cfg.north);
+\draw[arr] (cfg.south) -- (val.north);
+\draw[arr] (cfg.south) -- (met.north);
+\draw[arr] (val.south) -- (out.north);
+\draw[arr] (met.south) -- (out.north);
+
+% Training feedback loop
+\draw[loop] (cfg.east) -- ++(0.55,0) |- (focal.east)
+  node[pos=0.22, right, font=\scriptsize, text=gray!50, align=left] {weight\\update};
+
+\end{tikzpicture}%
+}

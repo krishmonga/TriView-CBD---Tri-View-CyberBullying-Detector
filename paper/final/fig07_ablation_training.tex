@@ -1,0 +1,105 @@
+% Fig. 7 — Ablation results (a) and TriFuse training dynamics (b) — merged
+\begin{tikzpicture}
+\node[anchor=south west, font=\bfseries\footnotesize] at (0,7.55cm) {(a) Branch-level ablation on both datasets};
+
+\begin{axis}[
+  trifuse bar,
+  at={(0,3.35cm)},
+  anchor=south west,
+  width=\columnwidth,
+  height=0.42\columnwidth,
+  symbolic x coords={Lex.,Sem.,{L+S},{L+T},{S+T},{Late F.},TriFuse},
+  xtick=data,
+  x tick label style={rotate=22, anchor=east, font=\scriptsize},
+  ymin=91.5,
+  ymax=96.2,
+  title={},
+  legend style={at={(0.98,0.02)}, anchor=south east, font=\scriptsize},
+]
+\addplot+[fill=trifuseBlue!85, draw=black!50] coordinates {
+  (Lex.,93.99) (Sem.,92.99) ({L+S},94.08) ({L+T},93.93) ({S+T},94.18) ({Late F.},94.25) (TriFuse,94.32)
+};
+\addplot+[fill=trifuseGreen!85, draw=black!50] coordinates {
+  (Lex.,95.84) (Sem.,95.46) ({L+S},95.68) ({L+T},95.73) ({S+T},95.65) ({Late F.},95.73) (TriFuse,95.87)
+};
+\legend{Dataset~I, Dataset~II}
+\end{axis}
+
+\node[anchor=south west, font=\bfseries\footnotesize] at (0,3.05cm) {(b) TriFuse training curves and OneCycleLR schedule};
+
+\begin{axis}[
+  name=lossplot,
+  at={(0cm,0cm)},
+  anchor=south west,
+  width=0.31\columnwidth,
+  height=0.32\columnwidth,
+  xmin=1, xmax=55,
+  ymin=0.05, ymax=0.65,
+  xlabel={Epoch},
+  ylabel={Focal loss},
+  tick label style={font=\scriptsize},
+  label style={font=\scriptsize},
+  title={Loss},
+  title style={font=\scriptsize\bfseries},
+  grid=major,
+  grid style={gray!25},
+]
+\addplot[trifuseBlue, thick] coordinates {
+  (1,0.52)(5,0.41)(10,0.30)(15,0.22)(20,0.16)(25,0.13)(30,0.11)(35,0.10)(40,0.09)(45,0.09)(50,0.08)(55,0.08)
+};
+\addplot[trifuseOrange, thick] coordinates {
+  (1,0.58)(5,0.46)(10,0.34)(15,0.25)(20,0.18)(25,0.15)(30,0.13)(35,0.12)(40,0.11)(45,0.11)(50,0.10)(55,0.10)
+};
+\end{axis}
+
+\begin{axis}[
+  name=accplot,
+  at={(0.34\columnwidth,0cm)},
+  anchor=south west,
+  width=0.31\columnwidth,
+  height=0.32\columnwidth,
+  xmin=1, xmax=55,
+  ymin=82, ymax=97,
+  xlabel={Epoch},
+  ylabel={Acc.\ (\%)},
+  tick label style={font=\scriptsize},
+  label style={font=\scriptsize},
+  title={Accuracy},
+  title style={font=\scriptsize\bfseries},
+  grid=major,
+  grid style={gray!25},
+]
+\addplot[trifuseBlue, thick] coordinates {
+  (1,84.2)(5,88.1)(10,91.0)(15,92.8)(20,93.9)(25,94.6)(30,95.1)(35,95.4)(40,95.6)(45,95.7)(50,95.8)(55,95.8)
+};
+\addplot[trifuseOrange, thick] coordinates {
+  (1,83.5)(5,87.4)(10,90.5)(15,92.4)(20,93.6)(25,94.3)(30,94.9)(35,95.2)(40,95.5)(45,95.6)(50,95.7)(55,95.7)
+};
+\addplot[trifuseRed, dashed, thick] coordinates {(1,95.87)(55,95.87)};
+\end{axis}
+
+\begin{axis}[
+  at={(0.68\columnwidth,0cm)},
+  anchor=south west,
+  width=0.31\columnwidth,
+  height=0.32\columnwidth,
+  xmin=1, xmax=55,
+  ymin=0, ymax=5.5,
+  xlabel={Epoch},
+  ylabel={LR ($\times10^{-4}$)},
+  tick label style={font=\scriptsize},
+  label style={font=\scriptsize},
+  title={OneCycleLR},
+  title style={font=\scriptsize\bfseries},
+  grid=major,
+  grid style={gray!25},
+]
+\addplot[trifuseOrange, thick] coordinates {
+  (1,0.05)(5,0.8)(10,2.2)(15,3.8)(20,4.9)(25,5.0)(30,4.2)(35,2.8)(40,1.2)(45,0.2)(50,0.05)(55,0.05)
+};
+\end{axis}
+
+\node[font=\scriptsize, anchor=north west] at (lossplot.north west) {Train};
+\node[font=\scriptsize, text=trifuseOrange, anchor=north west, xshift=1.0cm] at (lossplot.north west) {Val};
+
+\end{tikzpicture}

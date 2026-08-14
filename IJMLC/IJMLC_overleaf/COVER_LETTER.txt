@@ -1,0 +1,23 @@
+Dear Editor,
+
+Please consider our manuscript entitled "Mitigating Cyberbullying with TriFuse: A Multi-View Model Fusing Lexical, Semantic, and Structural Text Features" for publication in the International Journal of Machine Learning and Cybernetics.
+
+Cyberbullying detection is a text classification problem in which representation choice and fusion strategy strongly affect performance. Most existing systems rely on a single encoder (CNN, LSTM, or Transformer) or combine models through late ensemble voting. We propose TriFuse, which formulates the task as multi-view representation learning: lexical (CNN), semantic (Transformer), and structural (BiLSTM) branches train jointly on shared embeddings, and an attention-based fusion layer with learnable temperature assigns instance-dependent branch weights.
+
+We evaluate TriFuse on two public corpora—the Shahane multi-platform dataset (229,228 posts) and the Davidson hate-speech corpus (24,783 tweets)—under matched preprocessing, splits, and training budgets. TriFuse ranks first among Random Forest, LightGBM, CNN, BiLSTM, and Tuned LSTM baselines under single-split and stratified 5-fold cross-validation. Ablation experiments and manual error analysis on misclassified posts are included.
+
+We believe this work fits the scope of IJMLC because it addresses machine learning challenges in pattern recognition and multi-view fusion for text classification, with reproducible experiments across datasets and validation protocols.
+
+This manuscript is original, has not been published elsewhere, and is not under consideration by another journal. All authors have approved the submission.
+
+Thank you for your consideration.
+
+Sincerely,
+
+Pardeep Garg (Corresponding Author)
+Department of Electronics and Communication Engineering
+Jaypee University of Information Technology, Waknaghat, Solan, H.P. 173234, India
+E-mail: pardeep.garg@juitsolan.in
+
+On behalf of all authors:
+Krish Monga, Shivansh Mahajan, Pardeep Garg

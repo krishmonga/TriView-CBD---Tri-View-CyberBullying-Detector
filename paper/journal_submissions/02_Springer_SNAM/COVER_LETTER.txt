@@ -1,0 +1,14 @@
+Dear Editor,
+
+We submit the manuscript "Mitigating Cyberbullying with TriFuse: A Multi-View Model Fusing Lexical, Semantic, and Structural Text Features" for consideration in Social Network Analysis and Mining.
+
+TriFuse is a multi-view deep learning model for detecting abusive text on social media. It fuses lexical (CNN), semantic (Transformer), and structural (BiLSTM) representations with attention-based fusion, evaluated on two public corpora (229,228 and 24,783 instances) with ablation studies and cross-validation.
+
+The work fits SNAM's scope on social-media analytics, harmful-content detection, and network-scale text moderation. Source code and split configurations are available for reproducibility.
+
+This manuscript is original and not under review elsewhere. All authors approve submission.
+
+Sincerely,
+Krish Monga (First Author)
+krishmonga21667@gmail.com
+On behalf of Krish Monga, Shivansh Mahajan, and Pardeep Garg

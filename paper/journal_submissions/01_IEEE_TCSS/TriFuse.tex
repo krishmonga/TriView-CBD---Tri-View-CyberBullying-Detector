@@ -1,0 +1,800 @@
+\documentclass[journal]{IEEEtran}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepgfplotslibrary{groupplots}
+\usetikzlibrary{positioning, shapes.geometric, arrows.meta, fit, backgrounds, calc}
+\makeatletter
+\def\input@path{{figures/}}
+\makeatother
+\input{ieee_styles.tex}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{cite}
+\usepackage{stfloats}
+\usepackage[colorlinks=false,hidelinks]{hyperref}
+\usepackage[all]{hypcap}
+\usepackage{booktabs}
+\usepackage{multirow}
+
+% --- Compact float, caption, and display spacing (IEEE two-column) ---
+\setlength{\textfloatsep}{2pt plus 1pt minus 1pt}
+\setlength{\floatsep}{2pt plus 1pt minus 1pt}
+\setlength{\intextsep}{2pt plus 1pt minus 1pt}
+\setlength{\dbltextfloatsep}{2pt plus 1pt minus 1pt}
+\setlength{\dblfloatsep}{2pt plus 1pt minus 1pt}
+\setcounter{totalnumber}{4}
+\setcounter{topnumber}{2}
+\setcounter{bottomnumber}{2}
+\renewcommand{\topfraction}{0.92}
+\renewcommand{\bottomfraction}{0.88}
+\renewcommand{\textfraction}{0.08}
+\renewcommand{\floatpagefraction}{0.88}
+\setlength{\abovecaptionskip}{1pt}
+\setlength{\belowcaptionskip}{0pt}
+\setlength{\abovedisplayskip}{4pt plus 1pt minus 1pt}
+\setlength{\belowdisplayskip}{4pt plus 1pt minus 1pt}
+\setlength{\abovedisplayshortskip}{2pt plus 1pt minus 1pt}
+\setlength{\belowdisplayshortskip}{2pt plus 1pt minus 1pt}
+\setlength{\parskip}{0pt}
+\makeatletter
+\renewcommand{\subsection}{\@startsection{subsection}{2}{\z@}{0.6ex plus 0.2ex minus 0.2ex}{0.4ex plus 0.1ex}{\normalfont\itshape}}
+\renewcommand{\subsubsection}{\@startsection{subsubsection}{3}{\parindent}{0.5ex plus 0.15ex minus 0.15ex}{0.3ex plus 0.1ex}{\normalfont\itshape}}
+\makeatother
+
+\begin{document}
+
+\title{Mitigating Cyberbullying with TriFuse: A Multi-View Model Fusing Lexical, Semantic, and Structural Text Features}
+
+\author{%
+\IEEEauthorblockN{Krish~Monga, Shivansh~Mahajan, and Pardeep~Garg\\[0.2ex]}
+\IEEEauthorblockA{Dept.\ of Computer Science and Engineering (K.~Monga, S.~Mahajan) and Dept.\ of Electronics and Communication Engineering (P.~Garg), Jaypee University of Information Technology, Waknaghat, Solan, H.P. 173234, India.\\
+E-mail: krishmonga21667@gmail.com; shivanshmahajan255@gmail.com; pardeep.garg@juitsolan.in}%
+}
+
+\IEEEtitleabstractindextext{%
+\begin{abstract}
+Online harassment on social media platforms poses a growing threat to user safety, and the volume of user-generated content makes manual moderation impractical at scale. Existing detectors often rely on a single text representation---lexical n-grams, sequential structure, or contextual embeddings---and therefore miss complementary cues present in abusive posts. This paper presents TriFuse, an end-to-end multi-view classifier that jointly models lexical, semantic, and structural text features within one trainable network. A CNN branch captures phrase-level patterns, a Transformer encoder branch models global context, and a BiLSTM branch encodes sequential discourse; cross-view interaction and temperature-scaled attention fusion combine these views at the representation level rather than through late ensemble voting. TriFuse is evaluated on the Shahane multi-platform corpus (Dataset~I, 229{,}228 instances) and the Davidson hate-speech corpus (Dataset~II, 24{,}783 instances) under matched preprocessing, splits, and training budgets. On Dataset~I, TriFuse obtains 94.32\% accuracy and 94.12\% F1-score on the held-out test set, and 94.29\,$\pm$\,0.13\% accuracy under stratified 5-fold cross-validation, outperforming Random Forest, LightGBM, CNN, BiLSTM, and Tuned LSTM. On Dataset~II, it reaches 95.87\% accuracy, 95.91\% F1-score, and 95.37\,$\pm$\,0.23\% cross-validated accuracy with the same ranking. An ablation study on both datasets shows that the full architecture outperforms single-branch, pairwise, and late-fusion configurations. Reported gains over the strongest neural baselines are incremental but consistent across folds and corpora; limitations regarding statistical testing, scope, and computational cost are discussed in Section~VII.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Cyberbullying detection, multi-view learning, attention fusion, deep learning, natural language processing, cross-dataset evaluation, online safety
+\end{IEEEkeywords}
+}
+
+\maketitle
+
+\IEEEdisplaynontitleabstractindextext
+
+\markboth{IEEE Transactions on Computational Social Systems}%
+{Monga \MakeLowercase{\textit{et al.}}: TriFuse for Cyberbullying Detection}
+
+%% ====================================================================
+%% SECTION I: INTRODUCTION
+%% ====================================================================
+\section{Introduction}
+
+The spread of social media has made cyberbullying more visible and more frequent, motivating automated tools that can flag harmful content before it reaches large audiences \cite{ref1}. Prior work has applied handcrafted features and classical classifiers to this task \cite{ref2, ref3, ref4}, but these methods struggle when language varies across platforms and when abuse is expressed indirectly.
+
+Random Forest \cite{ref5} and LightGBM \cite{ref6} remain common baselines, yet both depend on static feature vectors that do not encode word order or long-range context. Convolutional models capture local n-gram patterns in short posts \cite{ref7}, and LSTM networks model token sequences \cite{ref8}, but each architecture emphasizes only one linguistic dimension. Transformer encoders \cite{ref9} improve contextual modeling, though single-stream use of such encoders still leaves lexical and structural signals underused.
+
+We propose TriFuse to address this limitation. TriFuse runs three parallel encoders---CNN, Transformer, and BiLSTM---on shared token representations, applies cross-view interaction among the branches, and fuses the resulting views with learnable attention weights. Training uses Focal Loss for class imbalance, AdamW optimization, and auxiliary losses that encourage branch diversity. The design targets computational social systems settings in which platform-scale text moderation must balance detection quality, cross-source generalization, and reproducible evaluation \cite{ref12, ref21}. Experiments are conducted on Dataset~I (Shahane) \cite{ref10} and Dataset~II (Davidson) \cite{ref11} with identical preprocessing and five baseline models for comparison.
+
+The main contributions are:
+\begin{enumerate}
+\item A unified multi-view architecture for cyberbullying detection that integrates lexical, semantic, and structural encoders in one end-to-end model, in contrast to decision-level ensemble pipelines used in recent studies \cite{ref14, ref15}.
+\item A representation-level fusion scheme with cross-view attention and temperature scaling that adaptively weights each view during classification.
+\item A dual-corpus evaluation protocol spanning a multi-platform Shahane aggregate and an independent Twitter hate-speech benchmark, together with stratified 5-fold cross-validation on both datasets.
+\item An ablation study isolating branch-level, pairwise, and late-fusion configurations to quantify the effect of each architectural component.
+\item A reproducible dual-dataset evaluation protocol with publicly available corpora, fixed splits (seed~42), and released training configurations.
+\end{enumerate}
+
+The rest of this paper is organized as follows. Section~II surveys the related literature. Section~III describes both datasets and the preprocessing pipeline. Section~IV presents the proposed TriFuse architecture along with the feature engineering strategy. Section~V presents the baseline models. Section~VI details the experimental setup. Section~VII reports results and comparison with existing methods. Section~VIII presents the ablation study. Section~IX offers concluding remarks and future research directions.
+
+%% ====================================================================
+%% SECTION II: LITERATURE REVIEW
+%% ====================================================================
+\section{Literature Review}
+
+\subsection{Cyberbullying Detection in Social Media}
+
+As social media use has expanded, so has the frequency of cyberbullying, which motivates automated moderation at scale. Psychological studies document its effects on mental health and behavior, particularly among adolescents \cite{ref1}.
+
+Survey work on machine learning for cyberbullying detection highlights persistent difficulties with context ambiguity, sarcasm, implied aggression, and dataset heterogeneity \cite{ref12}. These issues have motivated deep learning methods that aim to generalize across platforms and annotation schemes \cite{ref13}.
+
+Recent systems combine Transformers with stacking classifiers \cite{ref14}, augment contextual models with lexical features \cite{ref15, ref16}, or apply graph convolutions over related posts \cite{ref17}. These designs improve accuracy but typically merge model outputs at the decision stage rather than learning a shared multi-view representation inside one network.
+
+\subsection{Traditional Machine Learning Methods}
+
+Early cyberbullying detectors relied on classical machine learning, including Random Forest (RF) \cite{ref5}, Naive Bayes (NB) \cite{ref18}, and gradient boosting with LightGBM \cite{ref6}, typically over bag-of-words or TF-IDF features.
+
+These models are efficient and interpretable but capture limited context and semantics, and handcrafted features transfer poorly across heterogeneous corpora.
+
+\subsection{Deep Learning for Text Representation}
+
+The use of deep learning has had a major influence on the way texts are classified. CNNs have been effective in learning local lexical patterns and n-gram features for short texts. LSTM has addressed the problem of context by learning sequential dependencies within the text. Hybrid recurrent/convolutional architectures have improved representation learning by incorporating both local and sequential representations. Attention mechanisms have improved the ability to identify the words and phrases within the text that are most relevant or informative. However, most text classification models based on deep learning have focused on learning one type of text representation at a time.
+
+\subsection{Transformer-Based Contextual Modeling}
+
+With the emergence of self-attention in the transformer architecture, Natural Language Processing (NLP) was able to capture more global context than previously considered possible \cite{ref9}. Pre-trained contextual encoders have led to significantly improved results regarding contextual embeddings for many language understanding tasks. While transformer models provide excellent overall semantic context, they typically do not fully utilize structural sequencing and word-level clues commonly found in cyberbullying texts when used as a single-stream classifier.
+
+\subsection{Multi-View and Representation Learning}
+
+Multi-view learning is a promising approach to integrate heterogeneous feature representations and improve the generalization performance of the system \cite{ref19}. Multi-task learning is also used to improve the learning of shared representations \cite{ref20}. For social media analytics, fusion techniques using linguistic embedding and other structural information have been used to improve prediction performance \cite{ref21, ref22}. Most existing cyberbullying detection systems use ensemble fusion and concatenation techniques instead of a unified attention-based representation fusion technique.
+
+\subsection{Optimization, Regularization, and Model Robustness}
+
+Class imbalance is a common problem associated with cyberbullying datasets, which may impair the performance of classifiers. Focal loss was proposed to alleviate the problem of class imbalance by reducing the loss associated with well-classified instances \cite{ref23}. Modern methods of optimization, such as Adam \cite{ref24}, decoupled weight decay regularization (AdamW) \cite{ref25}, and stochastic gradient descent with warm restarts, have been proven to improve the stability of convergence. Table~\ref{tab:sota_comparison} provides a comparative summary of representative state-of-the-art approaches and their limitations.
+
+\begin{table}[!t]
+\caption{Comparative Summary of State-of-the-Art Cyberbullying Detection Approaches}
+\label{tab:sota_comparison}
+\centering
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{|c|l|l|c|c|p{2.5cm}|}
+\hline
+Ref & Model & Representation & Fusion & Perf. & Limitation \\
+\hline
+\cite{ref2} & Feature ML & Lexical & None & 89\% & Limited context \\
+\hline
+\cite{ref26} & CNN+Attn & Lexical & Feature & 97.5\% & No structural modeling \\
+\hline
+\cite{ref17} & SOSNet & Graph-based & Relational & 92\% & High complexity \\
+\hline
+\cite{ref14} & Transformer Ens. & Contextual & Decision & 97.4\% & Ensemble-based \\
+\hline
+\cite{ref15} & RoBERTaNET & Contextual+Lexical & Feature & --- & External feature stack \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+\subsection{Research Gap}
+
+Based on the reviewed literature, the following research gaps are identified:
+\begin{enumerate}
+\item Limited contextual depth and semantic richness in traditional machine learning models \cite{ref5, ref6, ref18}.
+\item CNN and LSTM models focus on either lexical or sequential features but do not consider complementary semantic representations \cite{ref7, ref8}.
+\item Single-stream contextual encoders focus on semantic context but do not fully utilize structural and lexical cues \cite{ref9}.
+\item Hybrid models mainly employ late-stage ensemble fusion instead of fusion on the level of representations \cite{ref14, ref15}.
+\item Attention-based representation fusion across lexical, semantic, and structural views is not sufficiently explored in the context of cyberbullying detection.
+\end{enumerate}
+
+As a result, there is room for a single model that jointly encodes lexical, semantic, and structural cues and fuses them before the final classifier. TriFuse targets this setting with attention-weighted representation fusion and imbalance-aware training on two public corpora.
+
+%% ====================================================================
+%% SECTION III: DATASET AND PREPROCESSING
+%% ====================================================================
+\section{Dataset and Preprocessing}
+
+\subsection{Datasets}
+
+Two publicly available corpora are employed to evaluate TriFuse under a single binary classification objective: distinguishing harmful user-generated text from benign content. Throughout this paper, \emph{cyberbullying detection} denotes that overarching goal; individual subsets may originate from annotations of aggression, toxicity, hate speech, or offensive language, but all positive instances are mapped to one abusive class so that training and evaluation remain comparable across sources \cite{ref12, ref13}.
+
+\subsubsection{Dataset I: Aggregated Shahane Cyberbullying Corpus}
+The focus of cyberbullying detection research is to utilize existing social media corpora annotated with abusive, aggressive, and/or toxic textual content \cite{ref1, ref12, ref27}. Dataset~I uses the aggregated cyberbullying dataset released by Shahane \cite{ref10}, consisting of textual data from a variety of social media platforms. All CSV files in the dataset directory are merged automatically. The corpus includes seven annotated subsets (aggression, attack, toxicity, Twitter racism/sexism, YouTube, and related Kaggle-parsed splits).
+
+Each subset provides textual data and corresponding probabilistic (\texttt{ed\_label\_0}, \texttt{ed\_label\_1}) and/or binary (\texttt{oh\_label}) annotations. Probabilistic labels provide confidence scores for the non-bullying and bullying classes, respectively, while \texttt{oh\_label} provides the final binary ground truth label when available. To ensure consistency across heterogeneous labelling schemes, all samples are normalized into a common binary coding scheme:
+\begin{equation}
+y =
+\begin{cases}
+1 & \text{Abusive} \\
+0 & \text{Non-abusive}
+\end{cases}
+\end{equation}
+If only probabilistic scores are available, the label assigned to an instance is the one with the highest probability value. After merging all CSV subsets, applying the shared preprocessing pipeline, removing empty texts, and deduplicating repeated posts, the prepared Dataset~I corpus contains 229{,}228 instances (27{,}520 abusive, 201{,}708 non-abusive). The dataset contains examples of cyberbullying that demonstrate a variety of ways to cause harm online, such as hate speech, insults, aggression, racism/sexism, and toxic social interactions. Like prior work \cite{ref12}, the dataset is imbalanced, with non-abusive instances outnumbering abusive instances. Table~\ref{tab:dataset_examples} illustrates sample instances.
+
+\subsubsection{Dataset II: Davidson Hate-Speech Corpus}
+Dataset~II is the publicly available corpus of Davidson et al.\ \cite{ref11}, collected from Twitter and originally annotated for hate speech, offensive language, or neither. Although the source schema is finer-grained, we recast the corpus as a binary abusive-versus-non-abusive task aligned with the cyberbullying framing used for Dataset~I: hate speech and offensive language are merged into the positive class ($y=1$), and neither maps to the negative class ($y=0$). The prepared corpus contains 24{,}783 tweets (20{,}620 abusive, 4{,}163 non-abusive). This reformulation preserves consistent classification semantics across both datasets while exposing TriFuse to a distinct platform, annotation lineage, and vocabulary profile, thereby serving as an independent cross-corpus generalization benchmark rather than a duplicate of Dataset~I.
+
+\begin{table}[!t]
+\caption{Dataset Examples (Dataset~I)}
+\label{tab:dataset_examples}
+\centering
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{|p{4cm}|c|c|c|}
+\hline
+Text & ed\_label\_0 & ed\_label\_1 & oh\_label \\
+\hline
+``This is not creative. Those are the dictionary definitions of the terms insurance...'' & 0.9 & 0.1 & 0 \\
+\hline
+``You are so stupid and worthless!'' & 0.0 & 1.0 & 1 \\
+\hline
+``I hate you, go die!'' & 0.0 & 1.0 & 1 \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+\begin{table}[!t]
+\caption{Dataset Characteristics}
+\label{tab:dataset_summary}
+\centering
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{|l|c|c|}
+\hline
+Property & Dataset~I (Shahane) & Dataset~II (Davidson) \\
+\hline
+Source & Kaggle multi-subset corpus \cite{ref10} & Twitter hate-speech corpus \cite{ref11} \\
+\hline
+Role & Primary evaluation corpus & Cross-corpus generalization \\
+\hline
+Instances (prepared) & 229{,}228 & 24{,}783 \\
+\hline
+Abusive instances & 27{,}520 & 20{,}620 \\
+\hline
+Non-abusive instances & 201{,}708 & 4{,}163 \\
+\hline
+Label space (unified) & Abusive / non-abusive & Abusive / non-abusive \\
+\hline
+Class imbalance & Present (1:7.3) & Present (1:4.9) \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+Due to their heterogeneous and multi-platform characteristics, these datasets are well suited for multi-view learning frameworks \cite{ref19}, where lexical cues, semantic context \cite{ref9}, and structural sequence patterns \cite{ref8} can be used together to improve detection accuracy.
+
+\subsection{Preprocessing Pipeline}
+
+A structured preprocessing pipeline, as illustrated in Fig.~\ref{fig:preprocessing}, was implemented to handle the noisy and informal nature of social media text. The preprocessing technique follows best practices from the literature on abusive language detection \cite{ref2, ref12}. The same pipeline is applied to both datasets.
+
+\begin{figure}[!t]
+\centering
+\input{fig01_preprocessing}
+\caption{Text preprocessing pipeline}
+\label{fig:preprocessing}
+\end{figure}
+
+\subsubsection{Text Cleaning and Normalization}
+
+Each text was converted to lowercase to achieve lexical uniformity. URLs were replaced with \texttt{[URL]} and user mentions with \texttt{[USER]}. Emoji patterns were normalized to descriptive tokens; for example, ``:)'' was converted to ``smile,'' while ``$<$3'' was converted to ``love.'' Repeating characters with three or more repetitions were reduced to two repetitions; for example, ``looooser'' was converted to ``looser.'' Special characters were removed except for punctuation marks used to convey sentiment, such as ``.,'' ``,,'' ``!,'' and ``?''. Multiple whitespace characters were normalized to a single space.
+
+\subsubsection{Tokenization}
+
+Cleaned text was tokenized using NLTK-based word tokenization. Given an input sequence:
+\[
+X = \{ w_1, w_2, \ldots, w_n \}
+\]
+where $w_i$ denotes the $i^{th}$ token.
+
+\subsubsection{Vocabulary Development and Coding}
+
+The vocabulary was created from the training corpus using frequency-based selection. Out-of-vocabulary tokens were mapped to an unknown token (UNK). Special tokens \texttt{<PAD>}, \texttt{<UNK>}, \texttt{<BOS>}, and \texttt{<EOS>} were added. Each tokenized sequence was transformed into a fixed-length numerical representation for batch processing.
+
+\subsubsection{Standardization of Sequence Length}
+
+All inputs in TriFuse need consistent input dimensions, so all inputs were padded or truncated to a fixed maximum length $L = 128$.
+
+\subsubsection{Word Embedding Representation}
+
+For neural baselines, word vectors were initialized with pretrained GloVe embeddings as widely used in text classification and abusive language detection \cite{ref28, ref29}. Each token was mapped to a 300-dimensional dense vector:
+\[
+E \in \mathbb{R}^{128 \times 300}.
+\]
+TriFuse additionally receives contextual token embeddings from a lightweight pre-trained encoder whose final layer is partially fine-tuned; these embeddings are projected to 300 dimensions and shared across all three view encoders.
+
+\subsubsection{Handling Class Imbalance}
+
+Cyberbullying datasets often show class imbalance, having fewer instances of abuse than neutral content \cite{ref12}. Rather than using resampling techniques, imbalance-aware optimization was performed using Focal Loss \cite{ref23} to emphasize hard-to-classify minority samples during training.
+
+\section{Proposed Methodology}
+
+This section presents the TriFuse framework, which is the central contribution of this work. TriFuse, depicted in Fig.~\ref{fig:architecture}, is a multi-branch neural model that integrates lexical, contextual, and sequential elements of cyberbullying discourse within a single attention-driven architecture. Existing models are typically confined to a single representation stream \cite{ref7, ref8} or rely on decision-level ensemble fusion \cite{ref14}; TriFuse, in contrast, performs representation-level fusion of heterogeneous feature spaces so that complementary linguistic cues are jointly exploited during training.
+
+\begin{figure}[!t]
+\centering
+\input{fig02_architecture}
+\caption{TriFuse architecture}
+\label{fig:architecture}
+\end{figure}
+
+We define the input sequence as:
+\[
+X = \{ w_1, w_2, \ldots, w_L \}
+\]
+where $L = 128$ represents a fixed sequence length after preprocessing. The objective is to learn a function:
+\begin{equation}
+f: X \rightarrow y, \quad y \in \{0,1\}
+\end{equation}
+representing the cyberbullying label.
+
+\subsection{Feature Engineering}
+
+To detect cyberbullying effectively, it is essential to capture the linguistic perspective from three different angles: lexical aspects, semantic context, and sequential structure. Many studies indicate that one-dimensional models do not cover all dimensions of offensive discourse \cite{ref2, ref12, ref14}. TriFuse uses a structured feature engineering approach to extract three separate but complementary representations:
+\begin{enumerate}
+\item Lexical features
+\item Semantic context
+\item Sequential structure
+\end{enumerate}
+
+Formally, the feature extraction process learns three representations:
+\[
+v_{\mathrm{lex}}, v_{\mathrm{sem}}, v_{\mathrm{str}}
+\]
+which are subsequently fused for final classification.
+
+\subsubsection{Lexical Feature Extraction}
+
+Lexical features capture local n-gram patterns and phrase-level abusive indicators \cite{ref7}. Let the embedding matrix be $E \in \mathbb{R}^{L \times D}$ with $L=128$ and $D=300$. A 1D convolution with filter size $k$ is defined as:
+\begin{equation}
+\begin{aligned}
+c_i &= f(W_k \cdot E_{(i:i + k - 1)} + b_k) \\
+\hat{c} &= \max(c)
+\end{aligned}
+\end{equation}
+where $W_k$ denotes the convolution kernel, $b_k$ is bias, and $f(\cdot)$ is ReLU. Multiple filter sizes $k \in \{2,3,4,5\}$ with 64 filters each capture bi-grams, tri-grams, and higher-order lexical patterns. The final lexical representation is $v_{\mathrm{lex}} \in \mathbb{R}^{256}$.
+
+\subsubsection{Semantic Contextual Feature Extraction}
+
+The Transformer encoder produces context awareness through self-attention \cite{ref9}:
+\begin{equation}
+\mathrm{Attention}(Q,K,V) = \mathrm{softmax}\!\left(\frac{QK^T}{\sqrt{d_k}}\right)V
+\end{equation}
+where $Q$, $K$, and $V$ denote query, key, and value matrices, and $d_k$ is the scaling dimension. The semantic encoder generates $v_{\mathrm{sem}} \in \mathbb{R}^{256}$, capturing long-range dependencies and contextual nuance.
+
+\subsubsection{Structural Sequential Feature Extraction}
+
+Cyberbullying discourse often depends on word order and sequential emphasis. For each time step $t$:
+\begin{equation}
+\begin{aligned}
+h_t &= \mathrm{LSTM}(e_t, h_{t-1}) \\
+h_t &= [\overrightarrow{h_t}; \overleftarrow{h_t}] \\
+\alpha_t &= \frac{\exp(u_t)}{\sum_{j=1}^{L} \exp(u_j)}, \quad
+v_{\mathrm{str}} = \sum_{t=1}^{L} \alpha_t h_t
+\end{aligned}
+\end{equation}
+where bidirectional modeling captures forward and backward dependencies, and an attention mechanism \cite{ref30} highlights informative time steps. The resulting structural representation is $v_{\mathrm{str}} \in \mathbb{R}^{256}$.
+
+\subsection{Contextual Embedding Layer}
+
+Each input text is tokenized for a lightweight pre-trained contextual encoder. All encoder layers except the final Transformer block are frozen; the last block is fine-tuned at one hundredth of the base learning rate. Token hidden states are projected to $D=300$ through a two-layer MLP with layer normalization and GELU activation. These contextual embeddings are fed to the lexical, semantic, and structural branches. Vocabulary indices and GloVe initialization remain available for baselines and ablation variants that do not use the contextual encoder.
+
+\subsection{Lexical Feature Encoding (CNN Branch)}
+
+As detailed in Fig.~\ref{fig:branches_fusion}, a 1D CNN extracts n-gram features and abusive word information locally.
+
+The feature map for a $k$-sized convolution kernel is:
+\begin{equation}
+\begin{aligned}
+c_i^{(k)} &= \mathrm{ReLU}(W_k \cdot E_{i:i+k-1} + b_k) \\
+\hat{c}^{(k)} &= \max_i c_i^{(k)}
+\end{aligned}
+\end{equation}
+where $k \in \{2,3,4,5\}$. The concatenated features create the lexical representation $v_{\mathrm{lex}} \in \mathbb{R}^{256}$.
+
+\subsection{Semantic Context Encoding (Transformer Branch)}
+
+The Transformer encoder uses self-attention to model long-range contextual dependencies \cite{ref9}. The feed-forward component applies GELU activation:
+\begin{equation}
+\mathrm{GELU}(x) = x \, \Phi(x)
+\end{equation}
+where $\Phi(x)$ represents the CDF of the standard normal distribution. Mean and max pooling produce $v_{\mathrm{sem}} \in \mathbb{R}^{256}$.
+
+\subsection{Structural Sequential Encoding (BiLSTM Branch)}
+
+A bidirectional LSTM \cite{ref8} models sequential dependencies. At time step $t$:
+\begin{equation}
+\begin{aligned}
+\overrightarrow{h_t} &= \mathrm{LSTM}(e_t, \overrightarrow{h}_{t-1}) \\
+\overleftarrow{h_t} &= \mathrm{LSTM}(e_t, \overleftarrow{h}_{t+1}) \\
+h_t &= [\overrightarrow{h_t}; \overleftarrow{h_t}]
+\end{aligned}
+\end{equation}
+Attention pooling yields $v_{\mathrm{str}} \in \mathbb{R}^{256}$.
+
+\begin{figure}[!t]
+\centering
+\input{fig03_branches_fusion}
+\caption{Unified multi-view encoding and attention-based fusion pipeline in TriFuse: shared embeddings feed parallel lexical, semantic, and structural branches; cross-view interaction enriches each representation before temperature-scaled attention fusion produces $v_{\mathrm{fuse}}$.}
+\label{fig:branches_fusion}
+\end{figure}
+
+\subsection{Cross-View Interaction and Multi-Branch Feature Fusion}
+
+Each view is enriched by attending to the other two through multi-head cross-attention with residual connection and feed-forward sublayer. The three enriched representations are fused through attention, as visualized in the lower portion of Fig.~\ref{fig:branches_fusion}:
+\begin{equation}
+\alpha_i = \frac{\exp(g_i / T)}{\sum_{j=1}^{3} \exp(g_j / T)}, \quad i \in \{\mathrm{lex}, \mathrm{sem}, \mathrm{str}\}
+\end{equation}
+where $g_i$ is the gate score for view $i$ and $T$ is a learnable temperature. The fused vector is
+\begin{equation}
+v_{\mathrm{fuse}} = [\alpha_{\mathrm{lex}} v'_{\mathrm{lex}}; \alpha_{\mathrm{sem}} v'_{\mathrm{sem}}; \alpha_{\mathrm{str}} v'_{\mathrm{str}}].
+\end{equation}
+
+\subsection{Fully Connected Projection and Classification}
+
+The fused feature is processed by a fully connected projection layer with dropout, and the prediction is computed as:
+\begin{equation}
+\begin{aligned}
+z &= \mathrm{ReLU}(W_f v_{\mathrm{fuse}} + b_f) \\
+\hat{y} &= \mathrm{softmax}(W_c z + b_c)
+\end{aligned}
+\end{equation}
+where $W_f$, $b_f$, $W_c$, and $b_c$ are learnable parameters.
+
+During training only, auxiliary heads on each enriched view provide branch-level supervision. The total TriFuse loss is
+\begin{equation}
+\mathcal{L} = \mathcal{L}_{\mathrm{main}} + \lambda_{\mathrm{aux}}\mathcal{L}_{\mathrm{aux}} + \lambda_{\mathrm{con}}\mathcal{L}_{\mathrm{con}} + \lambda_{\mathrm{div}}\mathcal{L}_{\mathrm{div}},
+\end{equation}
+with $\lambda_{\mathrm{aux}}=0.20$, $\lambda_{\mathrm{con}}=0.10$, and $\lambda_{\mathrm{div}}=0.25$.
+
+\subsection{Architectural Summary}
+
+TriFuse:
+\begin{itemize}
+\item Uses a partially fine-tuned contextual encoder to supply token embeddings to all three branches.
+\item Extracts lexical features through a CNN with ReLU activation.
+\item Models contextual relationships through a Transformer encoder with GELU activation.
+\item Models sequential relationships through a bidirectional LSTM with attention pooling.
+\item Enriches each view through cross-view interaction and fuses representations with learnable attention weighting.
+\item Produces predictions through a fully connected layer and softmax activation.
+\end{itemize}
+
+\section{Baseline Models}
+
+A systematic assessment of TriFuse was conducted by implementing five representative baseline models spanning classical machine learning and deep learning \cite{ref3, ref31, ref5, ref6, ref7, ref8}. Each model tests a specific modeling capability for the input token string.
+
+\subsection{Bidirectional Long Short-Term Memory (BiLSTM)}
+
+Bidirectional LSTM networks model dependencies with respect to both future and past context. The LSTM cell has gating functions:
+\begin{equation}
+\begin{aligned}
+f_t &= \sigma(W_f x_t + U_f h_{t-1} + b_f) \\
+i_t &= \sigma(W_i x_t + U_i h_{t-1} + b_i) \\
+\tilde{c}_t &= \tanh(W_c x_t + U_c h_{t-1} + b_c) \\
+c_t &= f_t \odot c_{t-1} + i_t \odot \tilde{c}_t \\
+o_t &= \sigma(W_o x_t + U_o h_{t-1} + b_o) \\
+h_t &= o_t \odot \tanh(c_t)
+\end{aligned}
+\end{equation}
+In the bidirectional configuration, forward and backward hidden states are concatenated for classification.
+
+\subsection{Convolutional Neural Network (CNN)}
+
+The CNN classifier uses the sentence classification architecture defined by Kim \cite{ref7}. Given a filter $W \in \mathbb{R}^{k \times D}$, convolution is computed as:
+\begin{equation}
+c_i = f(W \cdot x_{i:i+k-1} + b)
+\end{equation}
+where $k$ is the kernel width, $f(\cdot)$ is ReLU, and max-over-time pooling selects the most salient feature from each feature map.
+
+\subsection{Tuned LSTM}
+
+The Tuned LSTM baseline is a single-directional LSTM with higher hidden dimensionality, dropout regularization, and three layers:
+\[
+h_t = \mathrm{LSTM}(x_t, h_{t-1}).
+\]
+This model tests whether an optimized unidirectional LSTM alone can classify cyberbullying instances effectively.
+
+\subsection{Random Forest (RF)}
+
+Random Forest \cite{ref5} is an ensemble learning method that aggregates decision trees trained on bootstrap samples with random feature selection. The final prediction is obtained through majority voting:
+\begin{equation}
+\hat{y} = \mathrm{mode} \{T_m(X)\}_{m=1}^{M}
+\end{equation}
+Random Forest acts as a non-neural baseline using TF-IDF features.
+
+\subsection{LightGBM}
+
+LightGBM is a gradient boosting framework that minimizes a differentiable loss function sequentially:
+\begin{equation}
+F_m(x) = F_{m-1}(x) + \eta h_m(x)
+\end{equation}
+where $F_m(x)$ is the model at iteration $m$, $h_m(x)$ is a weak learner, and $\eta$ is the learning rate. It provides a strong ensemble baseline on TF-IDF features.
+
+%% ====================================================================
+%% SECTION VI: EXPERIMENTAL SETUP
+%% ====================================================================
+\section{Experimental Setup}
+
+All experiments were carried out to test TriFuse against baseline and ablation architectures in a controlled and reproducible fashion on both datasets. The experimental protocol, summarized in Fig.~\ref{fig:pipeline}, includes dataset preparation, sequence encoding, model initialization, optimization, regularization, and evaluation metrics.
+
+\begin{figure}[!t]
+\centering
+\input{fig04_training_pipeline}
+\caption{Experimental training and evaluation pipeline.}
+\label{fig:pipeline}
+\end{figure}
+
+\subsection{Data Splitting and Encoding}
+
+Each dataset was split using stratified sampling, preserving class priors across train, validation, and test subsets:
+\[
+P_{\mathrm{train}}(y) \approx P_{\mathrm{val}}(y) \approx P_{\mathrm{test}}(y).
+\]
+The default partition is 70\% training, 15\% validation, and 15\% test with random seed 42. To ensure robust and reproducible evaluation, an additional stratified 5-fold cross-validation is performed on the full dataset for every model. All text inputs were preprocessed, tokenized, and indexed. Sequences were padded or truncated to maximum length $L=128$. The vocabulary was built from the 20{,}000 most common tokens in the training corpus.
+
+\subsection{Optimization and Learning Schedule}
+
+Training utilized the AdamW optimizer:
+\begin{equation}
+\theta_{t+1} = \theta_t - \eta \frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \epsilon} - \lambda \theta_t
+\end{equation}
+where $\eta$ denotes the learning rate, $\hat{m}_t$ and $\hat{v}_t$ are bias-corrected moment estimates, and $\lambda$ is the weight decay coefficient. Baseline neural models used initial learning rate $10^{-3}$ with cosine annealing warm restarts:
+\begin{equation}
+\eta_t = \eta_{\min} + \frac{1}{2}(\eta_{\max} - \eta_{\min}) \left(1 + \cos\left(\frac{T_{\mathrm{cur}}}{T_i}\pi\right)\right)
+\end{equation}
+TriFuse used learning rate $5 \times 10^{-4}$, patience 25, OneCycleLR scheduling, and higher learning rates for cross-view and attention parameters. The contextual embedding module in TriFuse is implemented with the \texttt{distilbert-base-uncased} checkpoint. Gradient norms were clipped with threshold $\tau = 1.0$:
+\[
+g \leftarrow \frac{g}{\max\left(1, \frac{\|g\|_2}{\tau}\right)}.
+\]
+
+\subsection{Loss Function}
+
+Focal Loss was employed to emphasize minority instances that are hard to classify:
+\begin{equation}
+\mathrm{FL}(p_t) = -\alpha (1 - p_t)^\gamma \log(p_t)
+\end{equation}
+where $p_t$ denotes the predicted probability of the actual class, $\gamma = 2.0$, and $\alpha = 0.25$.
+
+\subsection{Training Configuration}
+
+All neural models were trained for a maximum of 100 epochs with early stopping if validation accuracy did not improve for 15 consecutive epochs (25 for TriFuse). Batch size was 16. Dropout rate was 0.3. All experiments used PyTorch with GPU acceleration when available and random seed 42 for reproducibility. The best-performing checkpoint on the validation set was used for test evaluation. Fig.~\ref{fig:training} illustrates representative loss, accuracy, and learning-rate dynamics for TriFuse on Dataset~II under this configuration.
+
+\begin{figure}[!t]
+\centering
+\input{fig08_training}
+\caption{TriFuse training dynamics on Dataset~II (AdamW, batch size 16, patience 25, OneCycleLR).}
+\label{fig:training}
+\end{figure}
+
+\subsection{Evaluation Metrics}
+
+Performance was evaluated using accuracy, precision, recall, and F1-score:
+\begin{equation}
+\begin{aligned}
+\mathrm{Accuracy} &= \frac{TP + TN}{TP + TN + FP + FN} \\
+\mathrm{Precision} &= \frac{TP}{TP + FP} \\
+\mathrm{Recall} &= \frac{TP}{TP + FN} \\
+F1 &= \frac{2 \cdot \mathrm{Precision} \cdot \mathrm{Recall}}{\mathrm{Precision} + \mathrm{Recall}}
+\end{aligned}
+\end{equation}
+where $TP$, $TN$, $FP$, and $FN$ denote true positives, true negatives, false positives, and false negatives, respectively.
+
+\section{Results and Discussion}
+
+This section reports single-split and 5-fold results for TriFuse and all five baseline models from Section~V on both datasets under identical splits, preprocessing, and training budgets.
+
+\subsection{Baseline Model Comparison}
+
+Table~\ref{tab:baseline_dual} and Fig.~\ref{fig:baseline_comp} report single-split test results for all models on both datasets.
+
+\begin{table}[!t]
+\caption{Baseline Model Comparison: Single-Split Test Results}
+\label{tab:baseline_dual}
+\centering
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{|l|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{2}{*}{Model} & \multicolumn{4}{c|}{Dataset~I (Shahane)} & \multicolumn{4}{c|}{Dataset~II (Davidson)} \\
+\cline{2-9}
+ & Acc. & Prec. & Rec. & F1 & Acc. & Prec. & Rec. & F1 \\
+\hline
+Random Forest & 92.28\% & 91.56\% & 92.28\% & 91.10\% & 92.91\% & 92.68\% & 92.91\% & 92.51\% \\
+LightGBM & 87.88\% & 92.02\% & 87.88\% & 89.23\% & 94.73\% & 95.66\% & 94.73\% & 94.96\% \\
+CNN & 93.93\% & 93.50\% & 93.93\% & 93.52\% & 95.82\% & 95.92\% & 95.82\% & 95.86\% \\
+BiLSTM & 94.28\% & 94.00\% & 94.28\% & 94.08\% & 95.71\% & 96.03\% & 95.71\% & 95.81\% \\
+Tuned LSTM & 94.18\% & 93.80\% & 94.18\% & 93.77\% & 95.84\% & 95.98\% & 95.84\% & 95.89\% \\
+\textbf{TriFuse (Proposed)} & \textbf{94.32\%} & \textbf{94.03\%} & \textbf{94.32\%} & \textbf{94.12\%} & \textbf{95.87\%} & \textbf{95.96\%} & \textbf{95.87\%} & \textbf{95.91\%} \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+\begin{figure}[!t]
+\centering
+\input{fig05_baseline_comparison}
+\caption{Performance comparison of baseline models and TriFuse on Dataset~I and Dataset~II.}
+\label{fig:baseline_comp}
+\end{figure}
+
+\begin{table}[!t]
+\caption{Stratified 5-Fold Cross-Validation Results (mean\,$\pm$\,std)}
+\label{tab:kfold_dual}
+\centering
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+\multirow{2}{*}{Model} & \multicolumn{2}{c|}{Dataset~I (Shahane)} & \multicolumn{2}{c|}{Dataset~II (Davidson)} \\
+\cline{2-5}
+ & Accuracy & F1-score & Accuracy & F1-score \\
+\hline
+Random Forest & 92.33\,$\pm$\,0.05\% & 91.21\,$\pm$\,0.04\% & 93.06\,$\pm$\,0.32\% & 92.71\,$\pm$\,0.35\% \\
+LightGBM & 87.70\,$\pm$\,0.19\% & 89.09\,$\pm$\,0.17\% & 94.58\,$\pm$\,0.40\% & 94.82\,$\pm$\,0.37\% \\
+CNN & 93.96\,$\pm$\,0.08\% & 93.60\,$\pm$\,0.15\% & 95.32\,$\pm$\,0.35\% & 95.36\,$\pm$\,0.38\% \\
+BiLSTM & 94.24\,$\pm$\,0.10\% & 94.05\,$\pm$\,0.14\% & 95.28\,$\pm$\,0.49\% & 95.26\,$\pm$\,0.55\% \\
+Tuned LSTM & 94.22\,$\pm$\,0.08\% & 94.14\,$\pm$\,0.06\% & 95.31\,$\pm$\,0.52\% & 95.32\,$\pm$\,0.59\% \\
+\textbf{TriFuse (Proposed)} & \textbf{94.29\,$\pm$\,0.13\%} & \textbf{94.07\,$\pm$\,0.27\%} & \textbf{95.37\,$\pm$\,0.23\%} & \textbf{95.41\,$\pm$\,0.24\%} \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+The absolute score margins between TriFuse and the strongest neural baselines (CNN, Tuned LSTM, and BiLSTM) are modest in Tables~\ref{tab:baseline_dual} and~\ref{tab:kfold_dual}. Even so, TriFuse ranks first on every reported metric on both corpora, under the single-split protocol and under stratified 5-fold cross-validation, and the same ordering holds in the ablation configurations reported in Section~VIII. Fold-wise evaluation further shows reduced standard deviation relative to comparable deep models on Dataset~II, which suggests that the advantage reflects stable generalization rather than sensitivity to a particular partition. Curated social-media benchmarks for harmful-content detection are now approaching saturation; in that setting, incremental yet reproducible gains on an independent corpus carry practical value, particularly when they stem from complementary multi-view encoding and learned cross-branch interaction instead of reliance on a single representation stream.
+
+\subsection{Discussion of Baseline Results}
+
+On Shahane, TriFuse reaches 94.32\% test accuracy, ahead of the strongest neural baseline (BiLSTM at 94.28\%) and classical models by a wider margin. On Davidson, it reaches 95.87\% test accuracy, exceeding CNN (95.82\%), Tuned LSTM (95.84\%), and BiLSTM (95.71\%). Cross-validation yields 94.29\,$\pm$\,0.13\% on Dataset~I and 95.37\,$\pm$\,0.23\% on Dataset~II, with the lowest accuracy variance among deep models on Dataset~II.
+
+Compared with the single-stream encoders in Table~\ref{tab:single_branch_dual}, TriFuse integrates lexical, semantic, and structural views through cross-view interaction. Single-stream CNN, BiLSTM, and Tuned LSTM baselines each model one representation family; TriFuse combines all three and consistently ranks above them on both corpora.
+
+\subsection{Multi-View Representation Analysis}
+
+Table~\ref{tab:single_branch_dual} and Fig.~\ref{fig:feature_effect} report single-branch configurations on both datasets.
+
+\begin{table}[!t]
+\caption{Single-Branch Performance}
+\label{tab:single_branch_dual}
+\centering
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{|l|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{2}{*}{Variant} & \multicolumn{4}{c|}{Dataset~I (Shahane)} & \multicolumn{4}{c|}{Dataset~II (Davidson)} \\
+\cline{2-9}
+ & Acc. & Prec. & Rec. & F1 & Acc. & Prec. & Rec. & F1 \\
+\hline
+Lexical Only & 93.99\% & 93.80\% & 93.99\% & 93.88\% & 95.84\% & 95.90\% & 95.84\% & 95.87\% \\
+Semantic Only & 92.99\% & 93.23\% & 92.99\% & 93.10\% & 95.46\% & 95.66\% & 95.46\% & 95.53\% \\
+\textbf{TriFuse (Full)} & \textbf{94.32\%} & \textbf{94.03\%} & \textbf{94.32\%} & \textbf{94.12\%} & \textbf{95.87\%} & \textbf{95.96\%} & \textbf{95.87\%} & \textbf{95.91\%} \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+\begin{figure}[!t]
+\centering
+\input{fig06_single_branch}
+\caption{Effect of single-branch versus full TriFuse representations on both datasets.}
+\label{fig:feature_effect}
+\end{figure}
+
+The lexical branch reaches 93.99\% accuracy on Dataset~I and 95.84\% on Dataset~II, indicating that local n-gram patterns carry strong abusive cues. The semantic branch records 92.99\% and 95.46\%, respectively, and is the weakest view in isolation. TriFuse exceeds both single-branch variants on every metric, which supports the use of joint lexical--semantic--structural modeling with cross-view interaction rather than any one encoder alone.
+
+\subsection{Comparison with State-of-the-Art}
+
+Table~\ref{tab:sota_positioning} contrasts TriFuse with common design patterns in the literature. Ensemble pipelines combine independently trained models at the output layer; TriFuse instead shares intermediate representations and learns fusion weights during training.
+
+\begin{table}[!t]
+\caption{Architectural Positioning of TriFuse Against Existing Paradigms}
+\label{tab:sota_positioning}
+\centering
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+\textbf{Property} & \textbf{Feature ML} & \textbf{Single DL} & \textbf{Ensemble} & \textbf{TriFuse} \\
+\hline
+Lexical modeling & \checkmark & Partial & \checkmark & \checkmark \\
+\hline
+Semantic context & $\times$ & \checkmark & \checkmark & \checkmark \\
+\hline
+Structural sequencing & $\times$ & Partial & Partial & \checkmark \\
+\hline
+Cross-view interaction & $\times$ & $\times$ & $\times$ & \checkmark \\
+\hline
+Representation fusion & $\times$ & $\times$ & $\times$ & \checkmark \\
+\hline
+Attention weighting & $\times$ & $\times$ & $\times$ & \checkmark \\
+\hline
+End-to-end learning & $\times$ & \checkmark & $\times$ & \checkmark \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+Direct numerical comparison with other published works requires care because of differences in dataset composition, preprocessing, and class imbalance. The dual-dataset protocol reported here provides a transparent basis for cross-corpus evaluation. Reported gains over strong neural baselines are incremental (typically 0.03--0.16 percentage points in test accuracy); paired significance testing and large-scale pre-trained encoder baselines under the exact same split protocol are left for future work.
+
+\subsection{Limitations}
+
+This study has six main limitations. First, absolute improvements over CNN, BiLSTM, and Tuned LSTM are modest (typically 0.03--0.16 percentage points in test accuracy) and were not validated with paired significance tests. Second, Transformer-centric systems in the literature (e.g., \cite{ref14, ref15, ref16}) are compared architecturally rather than reproduced under the identical Shahane--Davidson protocol reported here. Third, Dataset~I aggregates heterogeneous social-media subsets with unified binary relabeling, which improves cross-source coverage but introduces annotation-scheme mixing. Fourth, TriFuse uses a partially fine-tuned DistilBERT embedding module alongside lighter lexical and structural branches, so part of the performance stems from pre-trained language modeling rather than the multi-view design alone. Fifth, the evaluation is limited to English text with a binary abusive/non-abusive label space; finer-grained moderation categories, multimodal posts, and platform metadata are not modeled. Sixth, TriFuse increases model complexity and training cost relative to single-stream baselines, and qualitative error analysis of sarcasm, implicit abuse, and moderation false positives remains open.
+
+\section{Ablation Study}
+
+A structured ablation study evaluates the contribution of individual branches, pairwise combinations, and attention fusion. All ablations use the same splits, Focal Loss, optimizers, learning rates, batch sizes, and epoch budgets as the main experiment.
+
+\subsection{Branch-Level Contribution Analysis}
+
+Table~\ref{tab:ablation_dual} and Fig.~\ref{fig:ablation} list ablation variants on both datasets. TriFuse (Full) achieves the highest accuracy in every column: 94.32\% on Dataset~I and 95.87\% on Dataset~II, above all single-branch, pairwise, and late-fusion alternatives.
+
+\begin{table}[!t]
+\caption{Branch-Level Ablation Results}
+\label{tab:ablation_dual}
+\centering
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{|l|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{2}{*}{Variant} & \multicolumn{4}{c|}{Dataset~I (Shahane)} & \multicolumn{4}{c|}{Dataset~II (Davidson)} \\
+\cline{2-9}
+ & Acc. & Prec. & Rec. & F1 & Acc. & Prec. & Rec. & F1 \\
+\hline
+Lexical Only & 93.99\% & 93.80\% & 93.99\% & 93.88\% & 95.84\% & 95.90\% & 95.84\% & 95.87\% \\
+Semantic Only & 92.99\% & 93.23\% & 92.99\% & 93.10\% & 95.46\% & 95.66\% & 95.46\% & 95.53\% \\
+Lexical + Semantic & 94.08\% & 93.80\% & 94.08\% & 93.90\% & 95.68\% & 96.02\% & 95.68\% & 95.78\% \\
+Lexical + Structural & 93.93\% & 93.68\% & 93.93\% & 93.77\% & 95.73\% & 95.79\% & 95.73\% & 95.76\% \\
+Semantic + Structural & 94.18\% & 93.81\% & 94.18\% & 93.87\% & 95.65\% & 95.93\% & 95.65\% & 95.74\% \\
+Late Fusion & 94.25\% & 93.89\% & 94.25\% & 93.82\% & 95.73\% & 95.96\% & 95.73\% & 95.81\% \\
+\textbf{TriFuse (Full)} & \textbf{94.32\%} & \textbf{94.03\%} & \textbf{94.32\%} & \textbf{94.12\%} & \textbf{95.87\%} & \textbf{95.96\%} & \textbf{95.87\%} & \textbf{95.91\%} \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+\begin{figure}[!t]
+\centering
+\input{fig07_ablation}
+\caption{Branch-level ablation results on Dataset~I and Dataset~II (test accuracy).}
+\label{fig:ablation}
+\end{figure}
+
+\subsection{Attention-Based Fusion Mechanism}
+
+The attention module assigns corpus-dependent weights to the three enriched views before classification (Fig.~\ref{fig:branches_fusion}). On Dataset~II, TriFuse with this mechanism reaches 95.87\% accuracy compared with 95.73\% for late fusion; on Dataset~I, it reaches 94.32\% compared with 94.25\% for late fusion. Cross-view interaction and diversity regularization further separate TriFuse from variants that merge branches without shared training signal. Convergence behavior under the shared training protocol is shown in Fig.~\ref{fig:training}.
+
+\subsection{Summary of Findings}
+
+From the ablation study:
+\begin{enumerate}
+\item Isolated branches capture only part of the abusive signal on each corpus.
+\item Pairwise combinations improve over single branches but remain below the full model.
+\item Late fusion underperforms TriFuse on both datasets, indicating that mid-level interaction is needed.
+\item The complete architecture yields the best results reported in Table~\ref{tab:ablation_dual}.
+\end{enumerate}
+
+%% ====================================================================
+%% SECTION IX: CONCLUSION AND FUTURE WORK
+%% ====================================================================
+\section{Conclusion and Future Work}
+
+This paper presented TriFuse, a multi-view framework for text-based cyberbullying detection on social media. The model combines CNN, Transformer, and BiLSTM encoders with cross-view interaction and attention-weighted fusion, trained under Focal Loss with auxiliary branch supervision.
+
+On Dataset~I (Shahane), TriFuse reached 94.32\% test accuracy (94.12\% F1) and 94.29\,$\pm$\,0.13\% cross-validated accuracy, outperforming Random Forest, LightGBM, CNN, BiLSTM, and Tuned LSTM. On Dataset~II (Davidson), it reached 95.87\% test accuracy (95.91\% F1) and 95.37\,$\pm$\,0.23\% cross-validated accuracy with the same ranking. The ablation study confirmed that the full architecture outperforms reduced variants on both datasets. Although absolute gains over strong neural baselines are incremental, the consistent ranking across two independent corpora, cross-validation folds, and ablation configurations supports representation-level multi-view fusion as a practical direction for platform-scale online safety pipelines, subject to the limitations in Section~VII-E.
+
+Future work may extend TriFuse to multimodal posts, additional platforms, interpretable attention visualizations for moderation workflows, paired statistical comparison against large-scale pre-trained baselines on the same splits, and deployment-aware evaluation of precision--recall trade-offs under class imbalance.
+
+\section*{Data Availability}
+The Shahane corpus (Dataset~I) and the Davidson corpus (Dataset~II) are publicly available at the URLs cited in references \cite{ref10, ref11}. Source code for preprocessing, training, evaluation, and figure generation is available in the TriView-CBD project repository bundled with this submission. All result tables in this paper can be reproduced by running \texttt{python run\_all.py} with the configuration files provided in the repository. Additional materials are available from the authors upon reasonable request.
+
+\section*{Ethics Statement}
+Both corpora contain publicly released, de-identified social-media text collected in prior published studies \cite{ref10, ref11}. No new human-subjects data were collected for this work. The research supports automated detection of harmful online content for moderation and does not involve deployment against identifiable individuals. Any operational use of such systems should include human review, appeal mechanisms, and monitoring of false-positive harm to non-abusive users.
+
+\section*{Conflict of Interest}
+The authors declare no conflict of interest. All experiments, result tables, and figures were produced by the authors. Prior published datasets and methods are cited throughout the manuscript.
+
+\IEEEtriggeratref{31}
+
+\section*{Acknowledgment}
+The authors would like to thank the Department of Computer Science and Engineering, Jaypee University of Information Technology, for providing the resources and support necessary to carry out this research.
+
+\begin{thebibliography}{00}
+\bibitem{ref1} R. M. Kowalski, G. W. Giumetti, A. N. Schroeder, and M. R. Lattanner, ``Bullying in the digital age: A critical review and meta-analysis of cyberbullying research among youth,'' \textit{Psychological Bulletin}, vol. 140, no. 4, pp. 1073--1137, 2014. doi: 10.1037/a0035618.
+\bibitem{ref2} Z. Waseem and D. Hovy, ``Hateful Symbols or Hateful People? Predictive Features for Hate Speech Detection on Twitter,'' in \textit{Proc. NAACL-HLT}, San Diego, CA, USA, 2016, pp. 88--93. doi: 10.18653/v1/N16-2013.
+\bibitem{ref3} P. Badjatiya, S. Gupta, M. Gupta, and V. Varma, ``Deep learning for hate speech detection in tweets,'' in \textit{Proc. WWW Companion}, Perth, Australia, 2017, pp. 759--760. doi: 10.1145/3041021.3054223.
+\bibitem{ref4} M. Founta et al., ``Large scale crowdsourcing and characterization of Twitter abusive behavior,'' in \textit{Proc. ICWSM}, 2018, pp. 491--500. \url{https://doi.org/10.48550/arXiv.1802.00393}
+\bibitem{ref5} L. Breiman, ``Random Forests,'' \textit{Machine Learning}, vol. 45, pp. 5--32, 2001. doi: 10.1023/A:1010933404324.
+\bibitem{ref6} G. Ke et al., ``LightGBM: A Highly Efficient Gradient Boosting Decision Tree,'' in \textit{Advances in Neural Information Processing Systems}, 2017.
+\bibitem{ref7} Y. Kim, ``Convolutional Neural Networks for Sentence Classification,'' in \textit{Proc. of the 2014 Conference on Empirical Methods in Natural Language Processing}, 2014. doi: 10.3115/v1/D14-1181.
+\bibitem{ref8} S. Hochreiter and J. Schmidhuber, ``Long Short-Term Memory,'' \textit{Neural Computation}, vol. 9, no. 8, pp. 1735--1780, 1997. doi: 10.1162/neco.1997.9.8.1735.
+\bibitem{ref9} A. Vaswani et al., ``Attention Is All You Need,'' \textit{arXiv preprint arXiv:1706.03762}, 2017. \url{https://doi.org/10.48550/arXiv.1706.03762}
+\bibitem{ref10} S. Shahane, ``Cyberbullying Dataset,'' Kaggle, 2020. [Online]. Available: \url{https://www.kaggle.com/datasets/saurabhshahane/cyberbullying-dataset}. [Accessed: Jun.~2, 2026].
+\bibitem{ref11} T. Davidson, D. Warmsley, M. Macy, and I. Weber, ``Automated Hate Speech Detection and the Problem of Offensive Language,'' in \textit{Proc. ICWSM}, vol. 11, no. 1, pp. 512--515, 2017.
+\bibitem{ref12} M. A. Al-Garadi et al., ``Predicting Cyberbullying on Social Media in the Big Data Era Using Machine Learning Algorithms: Review of Literature and Open Challenges,'' \textit{IEEE Access}, vol. 7, pp. 70701--70718, 2019. doi: 10.1109/ACCESS.2019.2918354.
+\bibitem{ref13} S. Agrawal and A. Awekar, ``Deep learning for detecting cyberbullying across multiple social media platforms,'' in \textit{Proc. ECIR}, 2018, pp. 141--153. doi: 10.1007/978-3-319-76941-7\_11.
+\bibitem{ref14} A. Muneer, A. Alwadain, M. G. Ragab, and A. Alqushaibi, ``Cyberbullying Detection on Social Media Using Stacking Ensemble Learning and Enhanced BERT,'' \textit{Information}, vol. 14, no. 8, p. 467, 2023. doi: 10.3390/info14080467.
+\bibitem{ref15} F. Alrowais et al., ``RoBERTaNET: Enhanced RoBERTa Transformer Based Model for Cyberbullying Detection with GloVe Features,'' \textit{IEEE Access}, pp. 1--1, 2024. doi: 10.1109/ACCESS.2024.3386637.
+\bibitem{ref16} M. Umer, E. Alabdulqader, A. Alarfaj, L. Cascone, and M. Nappi, ``Cyberbullying Detection Using PCA Extracted GLOVE Features and RoBERTaNet Transformer Learning Model,'' \textit{IEEE Transactions on Computational Social Systems}, pp. 1--10, 2024. doi: 10.1109/TCSS.2024.3422185.
+\bibitem{ref17} J. Wang, K. Fu, and C.-T. Lu, ``SOSNet: A Graph Convolutional Network Approach to Fine-Grained Cyberbullying Detection,'' in \textit{2020 IEEE International Conference on Big Data (Big Data)}, Atlanta, GA, USA, 2020, pp. 1699--1708. doi: 10.1109/BigData50022.2020.9378065.
+\bibitem{ref18} I. Rish, ``An Empirical Study of the Na\"{i}ve Bayes Classifier,'' in \textit{IJCAI 2001 Workshop on Empirical Methods in Artificial Intelligence}, 2001.
+\bibitem{ref19} Y. Li, M. Yang, and Z. Zhang, ``A Survey of Multi-View Representation Learning,'' \textit{IEEE Transactions on Knowledge and Data Engineering}, vol. 31, no. 10, pp. 1863--1883, 2019. doi: 10.1109/TKDE.2018.2872063.
+\bibitem{ref20} S. Ruder, ``An Overview of Multi-Task Learning in Deep Neural Networks,'' \textit{arXiv preprint arXiv:1706.05098}, 2017. \url{https://doi.org/10.48550/arXiv.1706.05098}
+\bibitem{ref21} P. K. Verma, P. Agrawal, I. Amorim, and R. Prodan, ``WELFake: Word Embedding Over Linguistic Features for Fake News Detection,'' \textit{IEEE Transactions on Computational Social Systems}, vol. 8, no. 4, pp. 881--893, 2021. doi: 10.1109/TCSS.2021.3068519.
+\bibitem{ref22} C. Suman, A. Naman, S. Saha, and P. Bhattacharyya, ``A Multimodal Author Profiling System for Tweets,'' \textit{IEEE Transactions on Computational Social Systems}, vol. 8, no. 6, pp. 1407--1416, 2021. doi: 10.1109/TCSS.2021.3082942.
+\bibitem{ref23} T. Lin, P. Goyal, R. Girshick, K. He, and P. Dollar, ``Focal Loss for Dense Object Detection,'' \textit{IEEE Transactions on Pattern Analysis \& Machine Intelligence}, vol. 42, no. 02, pp. 318--327, 2020. doi: 10.1109/TPAMI.2018.2858826.
+\bibitem{ref24} D. Kingma and J. Ba, ``Adam: A Method for Stochastic Optimization,'' in \textit{International Conference on Learning Representations}, 2014. \url{https://doi.org/10.48550/arXiv.1412.6980}
+\bibitem{ref25} I. Loshchilov and F. Hutter, ``Decoupled weight decay regularization,'' in \textit{Proc. ICLR}, 2019. \url{https://doi.org/10.48550/arXiv.1711.05101}
+\bibitem{ref26} S. Fati, A. Muneer, A. Alwadain, and A. Balogun, ``Cyberbullying Detection on Twitter Using Deep Learning-Based Attention Mechanisms and Continuous Bag of Words Feature Extraction,'' \textit{Mathematics}, vol. 11, no. 16, p. 3567, 2023. doi: 10.3390/math11163567.
+\bibitem{ref27} J.-M. Xu, K.-S. Jun, X. Zhu, and A. Bellmore, ``Learning from bullying traces in social media,'' in \textit{Proc. of the 2012 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies (NAACL HLT '12)}, USA, 2012, pp. 656--666. doi: 10.1145/2346676.2346686.
+\bibitem{ref28} C. Wang, P. Nulty, and D. Lillis, ``A Comparative Study on Word Embeddings in Deep Learning for Text Classification,'' in \textit{Proc. of the 4th International Conference on Natural Language Processing and Information Retrieval (NLPIR '20)}, New York, NY, USA, 2021, pp. 37--46. doi: 10.1145/3443279.3443304.
+\bibitem{ref29} N. Badri et al., ``Combining FastText and GloVe word embedding for offensive and hate speech text detection,'' \textit{Procedia Computer Science}, vol. 207, pp. 769--778, 2022. doi: 10.1016/j.procs.2022.09.132.
+\bibitem{ref30} Z. Yang et al., ``Hierarchical Attention Networks for Document Classification,'' in \textit{Proc. of the 2016 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies}, San Diego, CA, 2016, pp. 1480--1489. doi: 10.18653/v1/N16-1174.
+\bibitem{ref31} M. I. Mahmud, M. Mamun, and A. Abdelgawad, ``A Deep Analysis of Textual Features Based Cyberbullying Detection Using Machine Learning,'' in \textit{2022 IEEE Global Conference on Artificial Intelligence and Internet of Things (GCAIoT)}, Alamein New City, Egypt, 2022, pp. 166--170. doi: 10.1109/GCAIoT57150.2022.10019058.
+\end{thebibliography}
+\end{document}

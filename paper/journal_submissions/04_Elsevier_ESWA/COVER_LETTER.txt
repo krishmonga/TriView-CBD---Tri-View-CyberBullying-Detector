@@ -1,0 +1,9 @@
+Dear Editor,
+
+We submit our manuscript on TriFuse, a multi-view deep learning system for cyberbullying detection, for Expert Systems with Applications.
+
+The paper provides architecture details, dual-dataset evaluation, and ablation analysis on public corpora. Code and splits are reproducible.
+
+All authors approve this submission.
+
+Krish Monga, krishmonga21667@gmail.com

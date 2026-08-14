@@ -1,0 +1,19 @@
+% Fig. 6 — Sec. VII: Single-branch vs full TriFuse (Table VI)
+\begin{tikzpicture}
+\begin{axis}[
+  trifuse bar branch,
+  width=\columnwidth,
+  height=4.3cm,
+  symbolic x coords={Lexical,Semantic,Structural,{TriFuse (Full)}},
+  xtick=data,
+  x tick label style={rotate=20, anchor=east, font=\scriptsize},
+]
+\addplot+[fill=trifuseDSone!75, draw=black!50, every node near coord/.append style={xshift=-3pt}] coordinates {
+  (Lexical,93.99) (Semantic,92.99) (Structural,93.91) ({TriFuse (Full)},94.32)
+};
+\addplot+[fill=trifuseDStwo!75, draw=black!50, every node near coord/.append style={xshift=3pt}] coordinates {
+  (Lexical,95.84) (Semantic,95.46) (Structural,95.57) ({TriFuse (Full)},95.87)
+};
+\legend{Dataset~I, Dataset~II}
+\end{axis}
+\end{tikzpicture}

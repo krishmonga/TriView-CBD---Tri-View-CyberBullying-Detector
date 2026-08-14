@@ -1,0 +1,56 @@
+% Fig. 7 — Sec. VIII: Branch-level ablation (Table VIII)
+\begin{tikzpicture}
+\begin{axis}[
+  trifuse bar ablation,
+  width=\columnwidth,
+  height=5.0cm,
+  bar width=6pt,
+  enlarge x limits=0.14,
+  symbolic x coords={
+    {Lexical\\Only},
+    {Semantic\\Only},
+    {Lexical\\+ Semantic},
+    {Lexical\\+ Structural},
+    {Semantic\\+ Structural},
+    {Late\\Fusion},
+    {TriFuse\\(Full)}
+  },
+  xtick=data,
+  x tick label style={
+    rotate=45,
+    anchor=east,
+    font=\scriptsize,
+    align=center,
+  },
+  legend style={
+    font=\footnotesize,
+    fill=white,
+    draw=gray!40,
+    inner sep=2pt,
+    legend cell align={left},
+    at={(0.5,-0.48)},
+    anchor=north,
+    legend columns=2,
+  },
+]
+\addplot+[fill=trifuseDSone!75, draw=black!50, every node near coord/.append style={xshift=-2pt}] coordinates {
+  ({Lexical\\Only},93.99)
+  ({Semantic\\Only},92.99)
+  ({Lexical\\+ Semantic},94.08)
+  ({Lexical\\+ Structural},93.93)
+  ({Semantic\\+ Structural},94.18)
+  ({Late\\Fusion},94.25)
+  ({TriFuse\\(Full)},94.32)
+};
+\addplot+[fill=trifuseDStwo!75, draw=black!50, every node near coord/.append style={xshift=2pt}] coordinates {
+  ({Lexical\\Only},95.84)
+  ({Semantic\\Only},95.46)
+  ({Lexical\\+ Semantic},95.68)
+  ({Lexical\\+ Structural},95.73)
+  ({Semantic\\+ Structural},95.65)
+  ({Late\\Fusion},95.73)
+  ({TriFuse\\(Full)},95.87)
+};
+\legend{Dataset~I, Dataset~II}
+\end{axis}
+\end{tikzpicture}

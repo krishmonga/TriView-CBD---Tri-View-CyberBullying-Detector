@@ -1,0 +1,7 @@
+Dear Program Chair,
+
+We wish to submit "TriFuse: Multi-View Cyberbullying Detection with Lexical, Semantic, and Structural Fusion" to IEEE INDICON.
+
+TriFuse combines CNN, Transformer, and BiLSTM views with attention fusion for abusive text detection, evaluated on Shahane and Davidson corpora.
+
+Krish Monga, krishmonga21667@gmail.com

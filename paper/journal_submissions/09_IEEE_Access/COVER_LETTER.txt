@@ -1,0 +1,7 @@
+Dear Editor,
+
+We submit "Mitigating Cyberbullying with TriFuse" for IEEE Access (only if APC funding is available).
+
+See FREE alternatives in sibling folders: 01_IEEE_TCSS, 06_IAES_IJ-AI, 02_Springer_SNAM.
+
+Krish Monga, krishmonga21667@gmail.com

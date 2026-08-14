@@ -1,0 +1,49 @@
+% Fig. 8 — Attention weighting and fusion process (IEEE TCSS single-column)
+\resizebox{\columnwidth}{!}{%
+\begin{tikzpicture}[>=Stealth, every node/.style={align=center},
+                    scale=0.48, transform shape]
+
+\tikzset{
+  ellipsenode/.style={ellipse, draw=orange!50, fill=orange!10,
+    thick, minimum width=2.4cm, minimum height=1.3cm, font=\small},
+  ellipsegreen/.style={ellipse, draw=green!60, fill=green!15,
+    thick, minimum width=2.4cm, minimum height=1.3cm, font=\small},
+  ellipsepurple/.style={ellipse, draw=purple!50, fill=purple!12,
+    thick, minimum width=2.4cm, minimum height=1.3cm, font=\small},
+  process/.style={rectangle, rounded corners=4pt, draw=gray!60, fill=white,
+    thick, minimum width=2.8cm, minimum height=0.95cm, text width=2.6cm, font=\small},
+  processpink/.style={rectangle, rounded corners=4pt, draw=red!40, fill=red!10,
+    thick, minimum width=2.8cm, minimum height=0.95cm, text width=2.6cm, font=\small},
+  decision/.style={diamond, aspect=2.0, draw=gray!60, fill=white,
+    thick, text width=2.0cm, font=\small},
+  arrow/.style={-{Stealth[length=2.2mm]}, thick, gray!70},
+}
+
+\node[ellipsenode] (hlex) at (0, 0) {$v'_{\mathrm{lex}}$};
+\node[ellipsegreen] (hsem) at (4.2, 0) {$v'_{\mathrm{sem}}$};
+\node[ellipsepurple] (hstr) at (8.4, 0) {$v'_{\mathrm{str}}$};
+
+\node[process] (gates) at (4.2, -2.6) {Learnable gates\\$g_i$ + temperature $T$};
+\node[decision] (softmax) at (4.2, -5.2) {Softmax\\$\alpha_i$};
+
+\node[processpink] (alex) at (0, -8.0) {$\alpha_{\mathrm{lex}}$};
+\node[processpink] (asem) at (4.2, -8.0) {$\alpha_{\mathrm{sem}}$};
+\node[process] (astr) at (8.4, -8.0) {$\alpha_{\mathrm{str}}$};
+
+\node[process] (wfa) at (4.2, -10.5) {Weighted sum\\$\sum_i \alpha_i v'_i$};
+\node[process] (vfuse) at (4.2, -12.8) {Concatenate\\$v_{\mathrm{fuse}}$};
+\node[processpink] (output) at (4.2, -15.1) {FC + softmax\\classifier};
+
+\draw[arrow] (hlex.south) -- ++(0,-0.4) -| (gates.north west);
+\draw[arrow] (hsem.south) -- (gates.north);
+\draw[arrow] (hstr.south) -- ++(0,-0.4) -| (gates.north east);
+\draw[arrow] (gates) -- (softmax);
+\draw[arrow] (softmax.south west) -- (alex.north);
+\draw[arrow] (softmax.south) -- (asem.north);
+\draw[arrow] (softmax.south east) -- (astr.north);
+\draw[arrow] (asem) -- (wfa);
+\draw[arrow] (wfa) -- (vfuse);
+\draw[arrow] (vfuse) -- (output);
+
+\end{tikzpicture}%
+}

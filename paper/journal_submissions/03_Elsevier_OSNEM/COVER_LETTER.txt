@@ -1,0 +1,9 @@
+Dear Editor,
+
+We submit "Mitigating Cyberbullying with TriFuse: A Multi-View Model Fusing Lexical, Semantic, and Structural Text Features" for Online Social Networks and Media.
+
+TriFuse detects abusive social-media text using parallel lexical, semantic, and structural encoders with attention fusion. We report dual-corpus experiments (Shahane 229,228 instances; Davidson 24,783 instances), baselines, and ablation studies.
+
+This manuscript is original and approved by all authors.
+
+Krish Monga, krishmonga21667@gmail.com

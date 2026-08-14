@@ -1,0 +1,99 @@
+% Fig. 3 — Sec. IV: Encoding and fusion flow (redesigned)
+\resizebox{\columnwidth}{!}{%
+\begin{tikzpicture}[
+  >=Stealth,
+  every node/.style={align=center},
+  arr/.style={-{Stealth[length=2.2mm]}, line width=0.9pt, gray!55},
+  xarr/.style={-{Stealth[length=1.8mm]}, line width=0.75pt, teal!55, dashed},
+  col/.style={rectangle, rounded corners=6pt, draw=#1!60, fill=#1!7, thick},
+  box/.style={rectangle, rounded corners=4pt, draw=#1!55, fill=white, thick,
+    minimum width=2.85cm, minimum height=0.82cm, text width=2.65cm, font=\scriptsize},
+  vec/.style={rectangle, rounded corners=5pt, draw=#1!65, fill=#1!14, thick,
+    minimum width=2.55cm, minimum height=0.72cm, font=\footnotesize\bfseries},
+  fuse/.style={rectangle, rounded corners=4pt, draw=teal!65, fill=teal!10, thick,
+    minimum width=9.6cm, minimum height=0.88cm, text width=9.3cm, font=\footnotesize},
+  lbl/.style={font=\bfseries\footnotesize, text=#1!75},
+]
+
+% ===================== TOP: Shared embeddings =====================
+\node[col=trifuseBlue, minimum width=10.9cm, minimum height=1.05cm] (share) at (5.45, 0) {%
+  \textbf{Shared token embeddings}\quad
+  $E\in\mathbb{R}^{128\times 300}$ \quad (DistilBERT partial FT + projection)};
+
+% ===================== THREE ENCODER COLUMNS =====================
+\node[lbl=trifuseOrange] at (1.55, -0.95) {Lexical view};
+\node[col=trifuseOrange, minimum width=3.05cm, minimum height=4.2cm] at (1.55, -2.85) {};
+\node[box=trifuseOrange] (l1) at (1.55, -1.75) {1D convolutions\\$k\!\in\!\{2,3,4,5\}$, 64 filters};
+\node[box=trifuseOrange] (l2) at (1.55, -2.85) {ReLU activation\\max-over-time pool};
+\node[vec=trifuseOrange] (vl) at (1.55, -3.95) {$v_{\mathrm{lex}}\in\mathbb{R}^{256}$};
+
+\node[lbl=trifuseGreen] at (5.45, -0.95) {Semantic view};
+\node[col=trifuseGreen, minimum width=3.05cm, minimum height=4.2cm] at (5.45, -2.85) {};
+\node[box=trifuseGreen] (s1) at (5.45, -1.75) {Transformer encoder\\multi-head self-attention};
+\node[box=trifuseGreen] (s2) at (5.45, -2.85) {GELU feed-forward\\mean + max pool};
+\node[vec=trifuseGreen] (vs) at (5.45, -3.95) {$v_{\mathrm{sem}}\in\mathbb{R}^{256}$};
+
+\node[lbl=trifuseRed] at (9.35, -0.95) {Structural view};
+\node[col=trifuseRed, minimum width=3.05cm, minimum height=4.2cm] at (9.35, -2.85) {};
+\node[box=trifuseRed] (t1) at (9.35, -1.75) {BiLSTM layers\\forward + backward};
+\node[box=trifuseRed] (t2) at (9.35, -2.85) {Attention pooling\\over time steps};
+\node[vec=trifuseRed] (vt) at (9.35, -3.95) {$v_{\mathrm{str}}\in\mathbb{R}^{256}$};
+
+% ===================== CROSS-VIEW =====================
+\node[fuse, minimum height=1.05cm] (cross) at (5.45, -5.35) {%
+  \textbf{Cross-view interaction}\quad each branch attends to the other two
+  (multi-head cross-attention, residual connection, FFN)};
+
+% ===================== ENRICHED VIEWS =====================
+\node[vec=trifuseOrange] (vlp) at (1.55, -6.55) {$v'_{\mathrm{lex}}$};
+\node[vec=trifuseGreen] (vsp) at (5.45, -6.55) {$v'_{\mathrm{sem}}$};
+\node[vec=trifuseRed] (vtp) at (9.35, -6.55) {$v'_{\mathrm{str}}$};
+
+% ===================== FUSION STACK =====================
+\node[fuse] (gate) at (5.45, -7.75) {%
+  \textbf{Learnable gate scores}\quad $g_{\mathrm{lex}}$, $g_{\mathrm{sem}}$, $g_{\mathrm{str}}$
+  with temperature $T$};
+\node[fuse] (alpha) at (5.45, -8.85) {%
+  \textbf{Attention weights}\quad
+  $\alpha_i=\dfrac{\exp(g_i/T)}{\sum_{j}\exp(g_j/T)}$,\quad $i\!\in\!\{\mathrm{lex},\mathrm{sem},\mathrm{str}\}$};
+\node[fuse] (cat) at (5.45, -9.95) {%
+  \textbf{Weighted concatenation}\quad
+  $v_{\mathrm{fuse}}=[\alpha_{\mathrm{lex}}v'_{\mathrm{lex}};\alpha_{\mathrm{sem}}v'_{\mathrm{sem}};\alpha_{\mathrm{str}}v'_{\mathrm{str}}]$};
+
+% ===================== OUTPUT =====================
+\node[rectangle, rounded corners=5pt, draw=trifuseRed!65, fill=trifuseRed!10, thick,
+  minimum width=6.8cm, minimum height=0.9cm, font=\footnotesize] (out) at (5.45, -11.25) {%
+  FC projection + dropout $\rightarrow$ softmax $\rightarrow$ $\hat{y}\in\{0,1\}$};
+
+% ===================== ARROWS =====================
+\draw[arr] (share.south) -- ++(0,-0.32) -| (l1.north);
+\draw[arr] (share.south) -- (s1.north);
+\draw[arr] (share.south) -- ++(0,-0.32) -| (t1.north);
+\draw[arr] (l1) -- (l2); \draw[arr] (l2) -- (vl);
+\draw[arr] (s1) -- (s2); \draw[arr] (s2) -- (vs);
+\draw[arr] (t1) -- (t2); \draw[arr] (t2) -- (vt);
+
+\draw[arr] (vl.south) -- ++(0,-0.28) -| (cross.north west);
+\draw[arr] (vs.south) -- (cross.north);
+\draw[arr] (vt.south) -- ++(0,-0.28) -| (cross.north east);
+
+\draw[arr] (cross.south) -- ++(0,-0.28) -| (vlp.north);
+\draw[arr] (cross.south) -- (vsp.north);
+\draw[arr] (cross.south) -- ++(0,-0.28) -| (vtp.north);
+
+\draw[arr] (vlp.south) -- ++(0,-0.28) -| (gate.north west);
+\draw[arr] (vsp.south) -- (gate.north);
+\draw[arr] (vtp.south) -- ++(0,-0.28) -| (gate.north east);
+
+\draw[arr] (gate) -- (alpha);
+\draw[arr] (alpha) -- (cat);
+\draw[arr] (cat) -- (out);
+
+% Lateral cross-view hints on branch outputs
+\draw[xarr] (vl.east) to[bend left=15] (vs.west);
+\draw[xarr] (vs.east) to[bend left=15] (vt.west);
+\draw[xarr] (vt.west) to[bend left=15] (vs.east);
+\draw[xarr] (vs.west) to[bend left=15] (vl.east);
+
+\end{tikzpicture}%
+}

@@ -1,0 +1,7 @@
+Dear Editor,
+
+We submit our research paper on TriFuse, a multi-view neural architecture for cyberbullying detection on social media, for publication in IJACSA.
+
+The study includes experiments on two public datasets, baseline comparisons, and ablation analysis.
+
+Krish Monga, krishmonga21667@gmail.com

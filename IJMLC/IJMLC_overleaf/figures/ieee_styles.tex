@@ -1,0 +1,67 @@
+% IEEE TCSS TriFuse — shared figure styles (readable single-column fonts)
+
+% Center figure graphics within the column (no other layout changes)
+\newcommand{\figcenter}[1]{%
+  \makebox[\columnwidth][c]{#1}%
+}
+\newcommand{\figinput}[1]{\figcenter{\input{#1}}}
+
+\definecolor{trifuseRed}{RGB}{192,57,43}
+\definecolor{trifuseBlue}{RGB}{70,130,180}
+\definecolor{trifuseGreen}{RGB}{60,160,100}
+\definecolor{trifuseOrange}{RGB}{230,140,50}
+\definecolor{trifuseDSone}{RGB}{70,130,180}
+\definecolor{trifuseDStwo}{RGB}{60,160,100}
+
+\pgfplotsset{
+  compat=1.18,
+  trifuse bar base/.style={
+    ybar,
+    bar width=8pt,
+    enlarge x limits=0.16,
+    tick align=inside,
+    axis lines*=left,
+    ymajorgrids=true,
+    grid style={gray!20},
+    clip=false,
+    legend style={
+      font=\footnotesize,
+      fill=white,
+      draw=gray!40,
+      inner sep=2pt,
+      legend cell align={left},
+      at={(0.5,-0.24)},
+      anchor=north,
+      legend columns=2,
+    },
+    tick label style={font=\footnotesize},
+    label style={font=\small},
+    nodes near coords={\pgfmathprintnumber[fixed, precision=2]{\pgfplotspointmeta}},
+    every node near coord/.append style={
+      font=\scriptsize,
+      anchor=south,
+      yshift=2.5pt,
+    },
+  },
+  trifuse bar baseline/.style={
+    trifuse bar base,
+    ymin=86.5,
+    ymax=97.8,
+    ytick={87,89,91,93,95,97},
+    ylabel={Test accuracy (\%)},
+  },
+  trifuse bar branch/.style={
+    trifuse bar base,
+    ymin=91.8,
+    ymax=96.8,
+    ytick={92,93,94,95,96},
+    ylabel={Test accuracy (\%)},
+  },
+  trifuse bar ablation/.style={
+    trifuse bar base,
+    ymin=91.8,
+    ymax=96.8,
+    ytick={92,93,94,95,96},
+    ylabel={Test accuracy (\%)},
+  },
+}

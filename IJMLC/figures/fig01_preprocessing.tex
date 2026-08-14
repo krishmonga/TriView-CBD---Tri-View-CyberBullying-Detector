@@ -1,0 +1,73 @@
+% Fig. 1 — Sec. III: Text preprocessing pipeline (redesigned)
+\resizebox{\columnwidth}{!}{%
+\begin{tikzpicture}[
+  >=Stealth,
+  every node/.style={align=center},
+  arr/.style={-{Stealth[length=2.4mm]}, line width=0.95pt, gray!55},
+  stg/.style={rectangle, rounded corners=5pt, draw=#1!65, fill=#1!10, thick,
+    minimum width=10.4cm, minimum height=1.05cm, text width=10.1cm, font=\footnotesize},
+  badge/.style={circle, fill=#1!55, text=black, font=\bfseries\scriptsize,
+    minimum size=0.58cm, inner sep=0pt},
+  path/.style={rectangle, rounded corners=4pt, draw=#1!60, fill=#1!12, thick,
+    minimum width=4.95cm, text width=4.7cm, minimum height=0.88cm, font=\footnotesize},
+  note/.style={font=\scriptsize, text=gray!55},
+]
+
+% Stage 0
+\node[stg=trifuseBlue, minimum width=10.9cm, text width=10.6cm] (raw) at (5.45, 0) {%
+  \textbf{Raw social text}\quad
+  Dataset~I (Shahane, 229,228) \textbar\ Dataset~II (Davidson, 24,783)};
+
+% Stages 1–5 (numbered badges + boxes)
+\node[badge=trifuseBlue] (n1) at (0.35, -1.35) {1};
+\node[stg=trifuseBlue] (s1) at (5.45, -1.35) {%
+  \textbf{Text cleaning \& normalization}\quad
+  lowercase; URL$\rightarrow$\texttt{[URL]}; @$\rightarrow$\texttt{[USER]}; emoticons;
+  char-trim; keep !?.,; collapse spaces};
+
+\node[badge=trifuseBlue] (n2) at (0.35, -2.65) {2};
+\node[stg=trifuseBlue] (s2) at (5.45, -2.65) {%
+  \textbf{NLTK word tokenization}\quad $X=\{w_1,w_2,\ldots,w_n\}$};
+
+\node[badge=trifuseBlue] (n3) at (0.35, -3.95) {3};
+\node[stg=trifuseBlue] (s3) at (5.45, -3.95) {%
+  \textbf{Vocabulary \& integer coding}\quad
+  top 20,000 tokens; OOV$\rightarrow$\texttt{<UNK>}; special tokens
+  \texttt{<PAD>}, \texttt{<BOS>}, \texttt{<EOS>}};
+
+\node[badge=trifuseBlue] (n4) at (0.35, -5.25) {4};
+\node[stg=trifuseBlue] (s4) at (5.45, -5.25) {%
+  \textbf{Sequence standardization}\quad pad or truncate to $L=128$};
+
+\node[badge=trifuseBlue] (n5) at (0.35, -6.55) {5};
+\node[stg=trifuseBlue] (s5) at (5.45, -6.55) {%
+  \textbf{Embedding tensor}\quad $E\in\mathbb{R}^{128\times 300}$};
+
+% Dual embedding paths
+\node[path=trifuseOrange] (glove) at (2.85, -7.95) {%
+  \textbf{Baselines}\\
+  GloVe 300-d vectors};
+\node[path=trifuseGreen] (bert) at (8.05, -7.95) {%
+  \textbf{TriFuse}\\
+  DistilBERT partial FT + MLP};
+
+% Output
+\node[rectangle, rounded corners=4pt, draw=trifuseRed!60, fill=trifuseRed!8, thick,
+  minimum width=10.9cm, minimum height=0.82cm, font=\footnotesize] (out) at (5.45, -9.25) {%
+  \textbf{Encoded input} ready for lexical, semantic, and structural branches};
+
+% Arrows
+\draw[arr] (raw) -- (s1);
+\draw[arr] (s1) -- (s2);
+\draw[arr] (s2) -- (s3);
+\draw[arr] (s3) -- (s4);
+\draw[arr] (s4) -- (s5);
+\draw[arr] (s5.south) -- ++(0,-0.32) -| (glove.north);
+\draw[arr] (s5.south) -- ++(0,-0.32) -| (bert.north);
+\draw[arr] (glove.south) -- ++(0,-0.28) -| (out.west);
+\draw[arr] (bert.south) -- ++(0,-0.28) -| (out.east);
+
+\node[note] at (5.45, -10.0) {Identical preprocessing for Dataset~I and Dataset~II (seed 42)};
+
+\end{tikzpicture}%
+}

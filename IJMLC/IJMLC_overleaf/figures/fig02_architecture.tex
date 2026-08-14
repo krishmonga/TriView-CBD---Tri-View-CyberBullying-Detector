@@ -1,0 +1,87 @@
+% Fig. 2 — Sec. IV: End-to-end TriFuse architecture (redesigned)
+\resizebox{\columnwidth}{!}{%
+\begin{tikzpicture}[
+  >=Stealth,
+  every node/.style={align=center},
+  arr/.style={-{Stealth[length=2.4mm]}, line width=0.95pt, gray!55},
+  darr/.style={arr, dashed, gray!45},
+  blk/.style={rectangle, rounded corners=5pt, draw=#1!65, fill=#1!10, thick,
+    font=\footnotesize},
+  brn/.style={blk=#1, minimum width=3.15cm, text width=2.95cm, minimum height=1.45cm},
+  sect/.style={font=\bfseries\scriptsize, text=#1!70},
+]
+
+% Row 1 — Input
+\node[blk=trifuseBlue, minimum width=10.8cm, text width=10.5cm,
+  minimum height=0.88cm] (inp) at (5.4, 0) {%
+  \textbf{Input}\quad $X=\{w_1,\ldots,w_{128}\}$ \quad$\rightarrow$\quad
+  $y\in\{0,1\}$ (abusive / non-abusive)};
+
+% Row 2 — Embedding
+\node[blk=trifuseBlue, minimum width=10.8cm, text width=10.5cm,
+  minimum height=0.95cm] (ctx) at (5.4, -1.35) {%
+  \textbf{Contextual embeddings}\quad
+  DistilBERT (partial FT) $\rightarrow$ MLP $\rightarrow$ $E\in\mathbb{R}^{128\times 300}$};
+
+% Row 3 — Three branches
+\node[sect=trifuseOrange] at (1.55, -2.15) {LEXICAL};
+\node[sect=trifuseGreen]  at (5.40, -2.15) {SEMANTIC};
+\node[sect=trifuseRed]     at (9.25, -2.15) {STRUCTURAL};
+
+\node[brn=trifuseOrange] (lex) at (1.55, -3.25) {%
+  \textbf{CNN}\\[-0.12em]
+  $k\!\in\!\{2,3,4,5\}$\\
+  $v_{\mathrm{lex}}\!\in\!\mathbb{R}^{256}$};
+\node[brn=trifuseGreen] (sem) at (5.40, -3.25) {%
+  \textbf{Transformer}\\[-0.12em]
+  self-attention\\
+  $v_{\mathrm{sem}}\!\in\!\mathbb{R}^{256}$};
+\node[brn=trifuseRed] (str) at (9.25, -3.25) {%
+  \textbf{BiLSTM}\\[-0.12em]
+  attn pool\\
+  $v_{\mathrm{str}}\!\in\!\mathbb{R}^{256}$};
+
+% Row 4 — Cross-view
+\node[blk=teal, minimum width=10.8cm, text width=10.5cm,
+  minimum height=0.95cm] (cv) at (5.4, -4.75) {%
+  \textbf{Cross-view interaction}\quad
+  multi-head cross-attention $\rightarrow$ $v'_{\mathrm{lex}}$, $v'_{\mathrm{sem}}$, $v'_{\mathrm{str}}$};
+
+% Row 5 — Fusion
+\node[blk=teal, minimum width=10.8cm, text width=10.5cm,
+  minimum height=0.95cm] (fus) at (5.4, -6.05) {%
+  \textbf{Attention fusion}\quad
+  $\alpha_i=\exp(g_i/T)/\sum_j\exp(g_j/T)$ $\rightarrow$ $v_{\mathrm{fuse}}$};
+
+% Row 6 — Heads
+\node[blk=trifuseRed, minimum width=6.0cm, text width=5.7cm,
+  minimum height=0.9cm] (cls) at (3.35, -7.45) {%
+  \textbf{Classifier}\quad FC + dropout $\rightarrow$ $\hat{y}$};
+\node[blk=gray, minimum width=4.4cm, text width=4.1cm, draw=gray!50, fill=gray!6,
+  minimum height=0.9cm, font=\scriptsize] (aux) at (8.45, -7.45) {%
+  \textbf{Auxiliary heads} (train only)\\
+  $\mathcal{L}_{\mathrm{aux}}$, $\mathcal{L}_{\mathrm{con}}$, $\mathcal{L}_{\mathrm{div}}$};
+
+% Row 7 — Total loss
+\node[blk=gray, minimum width=10.8cm, text width=10.5cm, draw=gray!45, fill=gray!5,
+  minimum height=0.78cm, font=\scriptsize] (loss) at (5.4, -8.65) {%
+  $\mathcal{L}=\mathcal{L}_{\mathrm{main}}+\lambda_{\mathrm{aux}}\mathcal{L}_{\mathrm{aux}}
+  +\lambda_{\mathrm{con}}\mathcal{L}_{\mathrm{con}}+\lambda_{\mathrm{div}}\mathcal{L}_{\mathrm{div}}$
+  \; ($\lambda_{\mathrm{aux}}{=}0.20$, $\lambda_{\mathrm{con}}{=}0.10$, $\lambda_{\mathrm{div}}{=}0.25$)};
+
+% Arrows
+\draw[arr] (inp) -- (ctx);
+\draw[arr] (ctx.south) -- ++(0,-0.28) -| (lex.north);
+\draw[arr] (ctx.south) -- (sem.north);
+\draw[arr] (ctx.south) -- ++(0,-0.28) -| (str.north);
+\draw[arr] (lex.south) -- ++(0,-0.25) -| (cv.north west);
+\draw[arr] (sem.south) -- (cv.north);
+\draw[arr] (str.south) -- ++(0,-0.25) -| (cv.north east);
+\draw[arr] (cv) -- (fus);
+\draw[arr] (fus.south) -- ++(0,-0.28) -| (cls.north);
+\draw[arr] (fus.south) -- ++(0,-0.28) -| (aux.north);
+\draw[darr] (cls.south) -- ++(0,-0.2) -| (loss.north west);
+\draw[darr] (aux.south) -- ++(0,-0.2) -| (loss.north east);
+
+\end{tikzpicture}%
+}

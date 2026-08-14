@@ -1,0 +1,695 @@
+\section{Introduction}
+
+Detecting of cyberbullying in social-media text is harder than standard document classification because posts are quite short, noisy, and often platform-specific \cite{ref1},~\cite{ref12}. A single message is read as abusive only with sarcasm, coded terms, or a particular word order \cite{ref2},~\cite{ref4}. Public datasets contain far more non-abusive content than abusive posts, so high accuracy can still mean many missed abusive cases \cite{ref23}. Models trained on one corpus also tend to drop in accuracy when vocabulary or label rules are changed on another site \cite{ref13}. Representation choices and fusion design are therefore first-order decisions not minor tuning steps.
+
+Early work relied on handcrafted features with Random Forest, LightGBM, or Na\"ive Bayes \cite{ref2},~\cite{ref5},~\cite{ref6},~\cite{ref18}. TF-IDF and bag-of-words vectors train quickly but drop word order and long-range context. Deep networks improved scores \cite{ref3}, yet most pipelines still use one encoder type: CNNs for n-grams \cite{ref7}, LSTMs or BiLSTMs for sequence \cite{ref8}, Transformers for context \cite{ref9}. When several cues are combined, fusion is often late---stacked voting or an external feature block on top of a Transformer \cite{ref14},~\cite{ref15},~\cite{ref16}---so branches do not train jointly and cannot share gradients \cite{ref19}.
+
+TriFuse addresses this by training a CNN lexical branch and a Transformer semantic branch, and a BiLSTM structural branch on the same embeddings. Cross-view attention refines the each branch before a temperature-scaled fusion layer which sets the branch weights as per instance. Focal Loss handles class skew and AdamW runs optimization techniques and auxiliary branch losses the reduce redundant features. We test on Dataset~I (Shahane, 229,228 posts) \cite{ref10} and Dataset~II (Davidson, 24,783 tweets) \cite{ref11} against five baselines with identical preprocessing, seed~42 splits, and training budgets \cite{ref12},~\cite{ref13}.
+
+The contributions of this paper include the following:
+\begin{enumerate}
+\item TriFuse formulates the cyberbullying detection problem as one of multi-view learning: lexical, semantic and structural signals are extracted from one end-to-end model, instead of being extracted separately through different models.
+\item The branch outputs are combined via cross view attention and learnable temperature scaling, and not just concatenated or late fusion voting \cite{ref14}.
+\item On the datasets by Shahane and Davidson, TriFuse performs best in single split and 5-fold evaluations. Ablations performed on both of these datasets demonstrate improved performance compared to the one-branch, two-branch, and late fusion baselines.
+\end{enumerate}
+
+Section~II surveys the prior methods. Sections~III--IV cover data, preprocessing, and architecture; Section~V lists baselines; Section~VI the protocol; Sections~VII--VIII results and ablations; Section~IX closes the paper.
+
+%% ====================================================================
+%% SECTION II: LITERATURE REVIEW
+%% ====================================================================
+\section{Literature Review}
+
+Cyberbullying detection has been tackled with handcrafted features, CNN and RNN models, fine-tuned Transformers, and various fusion schemes \cite{ref12},~\cite{ref13}. Table~\ref{tab:sota_comparison} lists the scores reported from selected papers; CNN-attention, graph and feature-based pipelines appear in \cite{ref17},~\cite{ref26}, ~ \cite{ref27},~\cite{ref28}, ~ \cite{ref29},~\cite{ref30}, ~ \cite{ref31}. The following subsections group this work by method type.
+
+\subsection{Traditional Machine Learning for Cyberbullying}
+
+Early classifiers fed n-grams, POS tags, sentiment lexicons, and character patterns into Random Forest, LightGBM, SVM, or Na\"ive Bayes \cite{ref2},~\cite{ref5},~\cite{ref6},~\cite{ref18},~\cite{ref31}. Waseem and Hovy \cite{ref2} reached 73.9\% F1 with Twitter-specific features, a score later neural models tried to beat. These pipelines are fast and easy to inspect, but sparse vectors miss word order and context-dependent abuse that lacks explicit slurs \cite{ref12}. The vocabulary also changes between platforms, which hurts the transfer.
+
+\subsection{Deep Learning Approaches}
+
+CNN and RNN models brought learned embeddings to this task \cite{ref3},~\cite{ref7},~\cite{ref8},~\cite{ref13}. Kim's CNN \cite{ref7} picks up the local n-grams useful for direct insults; LSTM and BiLSTM networks preserve the token order across other platforms \cite{ref8},~\cite{ref13}. Hybrids such as hierarchical attention \cite{ref30} and CNN-attention Twitter systems \cite{ref26} weight the important tokens during classification. Accuracy rises over classical baselines, but each design still depends on one representation-lexical for CNNs, sequential for LSTMs-and leaves other cues to separate the models or ensembles.
+
+\subsection{Transformer-Based Approaches}
+
+Transformers attends the the full sequence \cite{ref9}, so fine-tuned BERT-family encoders supply the strong context for short posts. Muneer et al.\ \cite{ref14} reported 97.4\% accuracy with a BERT stacking ensemble; Alrowais et al.\ \cite{ref15} added GloVe input to RoBERTa (95.0\% accuracy) in RoBERTaNET; Umer et al.\ \cite{ref16} used PCA-reduced GloVe with RoBERTaNet. The  Context improves, but lexical features are often pasted on as an external stack rather than the trained as a parallel branch alongside semantic and structural encoders. One Transformer stream may also miss explicit n-gram insults and order cues that CNNs and BiLSTMs catch more directly.
+
+\subsection{Multi-View and Feature Fusion Approaches}
+
+Multi-view learning argues that different feature spaces can help the generalization when combined properly \cite{ref19}. Related social-media work has merged embeddings with the  linguistic tags \cite{ref21}, and user profiles \cite{ref22}, or reply graphs \cite{ref17}; multi-task setups share layers across objectives \cite{ref20}. In the cyberbullying papers, fusion is still often late: models are trained separately and voted or stacked \cite{ref14}, or Transformer outputs are concatenated with pre-computed lexical vectors \cite{ref15},~\cite{ref16}. Gradients do not flow through a shared fusion block, so view weights cannot adjust per post. Skewed class counts add further difficulty; Focal Loss \cite{ref23} and AdamW \cite{ref25} are common training choices for imbalanced abusive-language data.
+
+\begin{table}[!t]
+\caption{Comparative Summary of State-of-the-Art Cyberbullying Detection Approaches}
+\label{tab:sota_comparison}
+\centering
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{|c|l|l|c|p{2.5cm}|}
+\hline
+Ref & Model & Representation & Perf. (Acc./F1) & Limitation \\
+\hline
+\cite{ref2} & Feature ML & Lexical & 73.9\% (F1) & Limited context \\
+\hline
+\cite{ref14} & Transformer Ens. & Contextual & 97.4\% (Acc.) & Ensemble-based \\
+\hline
+\cite{ref15} & RoBERTaNET & Contextual+Lexical & 95.0\% (Acc.) & External feature stack \\
+\hline
+\cite{ref17} & SOSNet & Graph-based & 92.7\% (Acc.) & Fine-grained multiclass \\
+\hline
+\cite{ref26} & CNN+Attn & Lexical & 94.0\% (Acc.) & No structural modeling \\
+\hline
+\cite{ref31} & Feature ML & Lexical & 85.5\% (Acc.) & Single-platform tweets \\
+\hline
+\end{tabular}
+}
+\vspace{2pt}
+{\footnotesize \textit{Note:} Acc.\ = accuracy; F1 = F1-score. Ref.~2 reports F1 on hate-speech features; Refs.~14, 15, 26, and 31 report accuracy. Ref.~17 reports SBERT+SOSNet accuracy on a five-category subset of 4,000 tweets (93.96\%, as cited in Ref.~26). Dataset, splits, task, and preprocessing differs across these papers, so the figures are reference points only and should not be compared directly with the Tables~\ref{tab:baseline_dual} and~\ref{tab:ablation_dual}. The \emph{Representation} column lists are the main feature types used; Table~\ref{tab:rep_comparison} compares dedicated branch design and fusion in more detail.}
+
+\end{table}
+
+Table~\ref{tab:rep_comparison} compares four model families on five representation criteria. CNN work \cite{ref7},~\cite{ref26} covers n-grams but not separate semantic or structural encoders. BiLSTM models \cite{ref8},~\cite{ref13} encode context and order through hidden states but lack a dedicated lexical conv layer. RoBERTaNET \cite{ref15} adds external GloVe features to RoBERTa without a structural branch or learned multi-view fusion. Only TriFuse trains lexical, semantic, and structural branches together with attention-based fusion in one network.
+
+\begin{table}[!t]
+\caption{Comparison of the Representation Coverage Across Model Families}
+\label{tab:rep_comparison}
+\centering
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{|l|c|c|c|c|c|}
+\hline
+\textbf{Study} & \textbf{Lexical} & \textbf{Semantic} & \textbf{Structural} & \textbf{Multi-View} & \textbf{Adaptive Fusion} \\
+\hline
+CNN \cite{ref7} & \checkmark & $\times$ & $\times$ & $\times$ & $\times$ \\
+\hline
+BiLSTM \cite{ref8} & $\times$ & \checkmark & \checkmark & $\times$ & $\times$ \\
+\hline
+RoBERTaNET \cite{ref15} & $\times$ & \checkmark & $\times$ & $\times$ & $\times$ \\
+\hline
+\textbf{TriFuse (Proposed)} & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark \\
+\hline
+\end{tabular}
+}
+\vspace{2pt}
+{\footnotesize \textit{Note:} Lexical = explicit n-gram/local pattern encoding (CNN or hand-crafted features); Semantic = contextual token meaning (Transformer or contextualized hidden states); Structural = sequential word-order modeling (BiLSTM or attention over time steps); Multi-View = parallel dedicated encoders for distinct representation types; Adaptive Fusion = learnable, instance-dependent view weighting (cross-view attention with temperature scaling). RoBERTaNET attaches external GloVe features rather than a dedicated lexical encoder branch.}
+\end{table}
+
+\subsection{Research Gaps}
+
+Four gaps motivate the TriFuse design:
+\begin{enumerate}
+\item Classical and  the single-branch deep models use one representation type and miss other textual cues \cite{ref5},~\cite{ref6},~\cite{ref7},~\cite{ref8}.
+\item Transformer systems add context but often attach lexical features externally and skip explicit sequence modeling \cite{ref9},~\cite{ref15},~\cite{ref16}.
+\item Many fusion papers stack or vote separately trained models instead of learning view weights inside the network \cite{ref14},~\cite{ref19}.
+\item Few studies test jointly fused multi-view models on multiple corpora under the same splits and preprocessing \cite{ref12},~\cite{ref13}.
+\end{enumerate}
+
+TriFuse learns all the three views in one stack, fuses them before the softmax layer, and checks the setup on Shahane and Davidson with matched preprocessing and split rules.
+
+%% ====================================================================
+%% SECTION III: DATASET AND PREPROCESSING
+%% ====================================================================
+\section{Dataset and Preprocessing}
+
+\subsection{Datasets}
+
+We use two public corpora with one binary label: abusive versus non-abusive text. In this paper, \emph{cyberbullying detection} means that task. Source labels cover aggression, toxicity, hate speech, and offensive language, but all positive cases are mapped to one abusive class so models share the same training target \cite{ref12},~\cite{ref13}.
+
+\subsubsection{Dataset I: Aggregated Shahane Cyberbullying Corpus}
+Dataset~I is built from the Shahane cyberbullying release on Kaggle \cite{ref10}. It merges seven platform-specific CSV subsets (aggression, attack, toxicity, Twitter racism/sexism, YouTube, and related Kaggle splits) into one file list, following multi-source bullying corpora described in prior work \cite{ref12},~\cite{ref27}.
+
+Each subset provides textual data and corresponding probabilistic (\texttt{ed\_label\_0}, \texttt{ed\_label\_1}) and/or binary (\texttt{oh\_label}) annotations. Probabilistic labels provide confidence scores for the non-bullying and bullying classes, respectively, while \texttt{oh\_label} provides the final binary ground truth label when available. To align mixed annotation schemes, all samples are mapped to one binary label:
+\begin{equation}
+y =
+\begin{cases}
+1 & \text{Abusive} \\
+0 & \text{Non-abusive}
+\end{cases}
+\end{equation}
+When only probability scores exist, the higher-scoring label is kept. After preprocessing, empty rows are removed and duplicate posts are dropped. The final Dataset~I split contains 229,228 posts (27,520 abusive, 201,708 non-abusive), covering insults, hate speech, aggression, and toxic comments. Class imbalance follows prior reports on this corpus \cite{ref12}. Table~\ref{tab:dataset_examples} shows sample rows.
+
+\subsubsection{Dataset II: Davidson Hate-Speech Corpus}
+Dataset~II comes from Davidson et al.\ \cite{ref11}, a Twitter corpus labelled as hate speech, offensive language, or neither. We map hate speech and offensive language to abusive ($y=1$) and neither to non-abusive ($y=0$) so the label definition matches Dataset~I. The prepared file contains 24,783 tweets (20,620 abusive, 4,163 non-abusive). Because the source platform and annotation scheme differ from Shahane, Dataset~II serves as an out-of-domain check rather than a relabelled copy of Dataset~I.
+
+\begin{table}[!t]
+\caption{Dataset Examples (Dataset~I)}
+\label{tab:dataset_examples}
+\centering
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{|p{4cm}|c|c|c|}
+\hline
+Text & ed\_label\_0 & ed\_label\_1 & oh\_label \\
+\hline
+``This is not creative. Those are the dictionary definitions of the terms insurance...'' & 0.9 & 0.1 & 0 \\
+\hline
+``You are so stupid and worthless!'' & 0.0 & 1.0 & 1 \\
+\hline
+``I hate you, go die!'' & 0.0 & 1.0 & 1 \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+\begin{table}[!t]
+\caption{Dataset Characteristics}
+\label{tab:dataset_summary}
+\centering
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{|l|c|c|}
+\hline
+Property & Dataset~I (Shahane) & Dataset~II (Davidson) \\
+\hline
+Source & Kaggle multi-subset corpus \cite{ref10} & Twitter hate-speech corpus \cite{ref11} \\
+\hline
+Role & Primary evaluation corpus & Cross-corpus generalization \\
+\hline
+Instances (prepared) & 229,228 & 24,783 \\
+\hline
+Abusive instances & 27,520 & 20,620 \\
+\hline
+Non-abusive instances & 201,708 & 4,163 \\
+\hline
+Label space (unified) & Abusive / non-abusive & Abusive / non-abusive \\
+\hline
+Class imbalance & Present (1:7.3) & Present (1:4.9) \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+Both corpora contain informal user text from social platforms, which gives the lexical, semantic, and structural branches realistic noise to handle \cite{ref8},~\cite{ref9},~\cite{ref19}.
+
+\subsection{Preprocessing Pipeline}
+
+Fig.~\ref{fig:preprocessing} outlines the shared preprocessing steps used for social text cleanup \cite{ref12}. The same code path is applied to Dataset~I and Dataset~II.
+
+\begin{figure}[!t]
+\centering
+\input{fig01_preprocessing}
+\caption{Text preprocessing pipeline}
+\label{fig:preprocessing}
+\end{figure}
+
+\subsubsection{Text Cleaning and Normalization}
+
+Text is lowercased, URLs are mapped to \texttt{[URL]}, and @mentions to \texttt{[USER]}. Common emoticons are replaced with words (e.g., ``:)'' $\rightarrow$ ``smile'', ``$<$3'' $\rightarrow$ ``love''). Character runs longer than two are shortened (``looooser'' $\rightarrow$ ``looser''). Punctuation that may carry sentiment (period, comma, !, ?) is kept; other symbols are stripped. Extra spaces are collapsed to one blank.
+
+\subsubsection{Tokenization}
+
+Cleaned text was tokenized using NLTK-based word tokenization. Given an input sequence:
+\[
+X = \{ w_1, w_2, \ldots, w_n \}
+\]
+where $w_i$ denotes the $i^{th}$ token.
+
+\subsubsection{Vocabulary Development and Coding}
+
+The vocabulary was created from the training corpus using frequency-based selection. Out-of-vocabulary tokens were mapped to an unknown token (UNK). Special tokens \texttt{<PAD>}, \texttt{<UNK>}, \texttt{<BOS>}, and \texttt{<EOS>} were added. Each tokenized sequence was transformed into a fixed-length numerical representation for batch processing.
+
+\subsubsection{Standardization of Sequence Length}
+
+For batched training across TriFuse and the neural baselines, each tokenized sequence was padded with \texttt{<PAD>} or truncated to a uniform maximum length of $L = 128$ tokens.
+
+\subsubsection{Word Embedding Representation}
+
+For neural baselines, word vectors were initialized with pretrained GloVe embeddings as widely used in text classification and abusive language detection \cite{ref28},~\cite{ref29}. Each token was mapped to a 300-dimensional dense vector:
+\[
+E \in \mathbb{R}^{128 \times 300}.
+\]
+TriFuse additionally receives contextual token embeddings from a partially fine-tuned DistilBERT encoder (\texttt{distilbert-base-uncased}); these embeddings are projected to 300 dimensions and shared across all three view encoders.
+
+\subsubsection{Handling Class Imbalance}
+
+Both corpora contain far more non-abusive than abusive posts \cite{ref12}. We keep the original counts and apply Focal Loss \cite{ref23} so misclassified abusive examples receive higher loss during training.
+
+\section{Proposed Methodology}
+
+Fig.~\ref{fig:architecture} shows TriFuse. Lexical, semantic, and sequential vectors are built in parallel and merged before the classifier. Single-stream baselines \cite{ref7},~\cite{ref8} and late ensembles \cite{ref14} do not share gradients through mid-level fusion the way this design does.
+
+\begin{figure}[!t]
+\centering
+\input{fig02_architecture}
+\caption{TriFuse architecture}
+\label{fig:architecture}
+\end{figure}
+
+We define the input sequence as:
+\[
+X = \{ w_1, w_2, \ldots, w_L \}
+\]
+where $L = 128$ represents a fixed sequence length after preprocessing. The objective is to learn a function:
+\begin{equation}
+f: X \rightarrow y, \quad y \in \{0,1\}
+\end{equation}
+representing the cyberbullying label.
+
+\subsection{Feature Engineering}
+
+Offensive posts can surface through word choice, surrounding context, or token order \cite{ref7},~\cite{ref8},~\cite{ref9}. TriFuse therefore builds three vectors before fusion:
+\begin{enumerate}
+\item Lexical features
+\item Semantic context
+\item Sequential structure
+\end{enumerate}
+
+Formally, the feature extraction process learns three representations:
+\[
+v_{\mathrm{lex}}, v_{\mathrm{sem}}, v_{\mathrm{str}}
+\]
+which are subsequently fused for final classification.
+
+\subsubsection{Lexical Feature Extraction}
+
+Lexical features capture local n-gram patterns and phrase-level abusive indicators \cite{ref7}. Let the embedding matrix be $E \in \mathbb{R}^{L \times D}$ with $L=128$ and $D=300$. A 1D convolution with filter size $k$ is defined as:
+\begin{equation}
+\begin{aligned}
+c_i &= f(W_k \cdot E_{(i:i + k - 1)} + b_k) \\
+\hat{c} &= \max(c)
+\end{aligned}
+\end{equation}
+where $W_k$ denotes the convolution kernel, $b_k$ is bias, and $f(\cdot)$ is ReLU. Multiple filter sizes $k \in \{2,3,4,5\}$ with 64 filters each capture bi-grams, tri-grams, and higher-order lexical patterns. The final lexical representation is $v_{\mathrm{lex}} \in \mathbb{R}^{256}$.
+
+\subsubsection{Semantic Contextual Feature Extraction}
+
+The Transformer encoder models token interactions with self-attention \cite{ref9}:
+\begin{equation}
+\mathrm{Attention}(Q,K,V) = \mathrm{softmax}\!\left(\frac{QK^T}{\sqrt{d_k}}\right)V
+\end{equation}
+where $Q$, $K$, and $V$ denote query, key, and value matrices, and $d_k$ is the scaling dimension. The semantic encoder outputs $v_{\mathrm{sem}} \in \mathbb{R}^{256}$ by pooling information across the full sequence.
+
+\subsubsection{Structural Sequential Feature Extraction}
+
+Word order can change the meaning of a hostile post. For each time step $t$:
+\begin{equation}
+\begin{aligned}
+h_t &= \mathrm{LSTM}(e_t, h_{t-1}) \\
+h_t &= [\overrightarrow{h_t}; \overleftarrow{h_t}] \\
+\alpha_t &= \frac{\exp(u_t)}{\sum_{j=1}^{L} \exp(u_j)}, \quad
+v_{\mathrm{str}} = \sum_{t=1}^{L} \alpha_t h_t
+\end{aligned}
+\end{equation}
+where bidirectional modeling captures forward and backward dependencies, and an attention mechanism \cite{ref30} highlights informative time steps. The resulting structural representation is $v_{\mathrm{str}} \in \mathbb{R}^{256}$.
+
+\subsection{Contextual Embedding Layer}
+
+TriFuse employs \texttt{distilbert-base-uncased} as a shared contextual embedding front end. Input text is tokenized with the DistilBERT tokenizer; all encoder layers except the final transformer block are frozen, and only that last block is fine-tuned at one hundredth of the base learning rate. Hidden states are projected to $D=300$ through a two-layer MLP with layer normalization and GELU activation; this projection layer is trained at the base learning rate and the resulting embeddings are supplied to the lexical, semantic, and structural branches. This DistilBERT module provides token-level context and is separate from the trainable Transformer stack in the semantic branch below. Vocabulary indices and GloVe initialization remain used for baselines and ablation variants that disable the DistilBERT front end.
+
+\subsection{Lexical Feature Encoding (CNN Branch)}
+
+As detailed in Fig.~\ref{fig:branches_fusion}, a 1D CNN extracts n-gram features and abusive word information locally.
+
+The feature map for a $k$-sized convolution kernel is:
+\begin{equation}
+\begin{aligned}
+c_i^{(k)} &= \mathrm{ReLU}(W_k \cdot E_{i:i+k-1} + b_k) \\
+\hat{c}^{(k)} &= \max_i c_i^{(k)}
+\end{aligned}
+\end{equation}
+where $k \in \{2,3,4,5\}$. The concatenated features create the lexical representation $v_{\mathrm{lex}} \in \mathbb{R}^{256}$.
+
+\subsection{Semantic Context Encoding (Transformer Branch)}
+
+Beyond the DistilBERT front end, a dedicated Transformer encoder stack processes the shared embeddings and models long-range dependencies through self-attention \cite{ref9}. The feed-forward component applies GELU activation:
+\begin{equation}
+\mathrm{GELU}(x) = x \, \Phi(x)
+\end{equation}
+where $\Phi(x)$ represents the CDF of the standard normal distribution. Mean and max pooling produce $v_{\mathrm{sem}} \in \mathbb{R}^{256}$.
+
+\subsection{Structural Sequential Encoding (BiLSTM Branch)}
+
+A bidirectional LSTM \cite{ref8} models sequential dependencies. At time step $t$:
+\begin{equation}
+\begin{aligned}
+\overrightarrow{h_t} &= \mathrm{LSTM}(e_t, \overrightarrow{h}_{t-1}) \\
+\overleftarrow{h_t} &= \mathrm{LSTM}(e_t, \overleftarrow{h}_{t+1}) \\
+h_t &= [\overrightarrow{h_t}; \overleftarrow{h_t}]
+\end{aligned}
+\end{equation}
+Attention pooling yields $v_{\mathrm{str}} \in \mathbb{R}^{256}$.
+
+\begin{figure}[!t]
+\centering
+\input{fig03_branches_fusion}
+\caption{TriFuse encoding and fusion flow: shared embeddings enter lexical, semantic, and structural branches; cross-view modules update each branch before attention fusion forms $v_{\mathrm{fuse}}$.}
+\label{fig:branches_fusion}
+\end{figure}
+
+\subsection{Cross-View Interaction and Multi-Branch Feature Fusion}
+
+Each view is updated by attending to the other two through multi-head cross-attention, a residual link, and a feed-forward block. The three updated vectors are then merged with the attention scheme shown at the bottom of Fig.~\ref{fig:branches_fusion}:
+\begin{equation}
+\alpha_i = \frac{\exp(g_i / T)}{\sum_{j=1}^{3} \exp(g_j / T)}, \quad i \in \{\mathrm{lex}, \mathrm{sem}, \mathrm{str}\}
+\end{equation}
+where $g_i$ is the gate score for view $i$ and $T$ is a learnable temperature. The fused vector is
+\begin{equation}
+v_{\mathrm{fuse}} = [\alpha_{\mathrm{lex}} v'_{\mathrm{lex}}; \alpha_{\mathrm{sem}} v'_{\mathrm{sem}}; \alpha_{\mathrm{str}} v'_{\mathrm{str}}].
+\end{equation}
+
+\subsection{Fully Connected Projection and Classification}
+
+The fused feature is processed by a fully connected projection layer with dropout, and the prediction is computed as:
+\begin{equation}
+\begin{aligned}
+z &= \mathrm{ReLU}(W_f v_{\mathrm{fuse}} + b_f) \\
+\hat{y} &= \mathrm{softmax}(W_c z + b_c)
+\end{aligned}
+\end{equation}
+where $W_f$, $b_f$, $W_c$, and $b_c$ are learnable parameters.
+
+During training only, auxiliary heads on each enriched view provide branch-level supervision. The total TriFuse loss is
+\begin{equation}
+\mathcal{L} = \mathcal{L}_{\mathrm{main}} + \lambda_{\mathrm{aux}}\mathcal{L}_{\mathrm{aux}} + \lambda_{\mathrm{con}}\mathcal{L}_{\mathrm{con}} + \lambda_{\mathrm{div}}\mathcal{L}_{\mathrm{div}},
+\end{equation}
+with $\lambda_{\mathrm{aux}}=0.20$, $\lambda_{\mathrm{con}}=0.10$, and $\lambda_{\mathrm{div}}=0.25$.
+
+\subsection{Architectural Summary}
+
+In brief, TriFuse (i)~feeds partially fine-tuned DistilBERT (\texttt{distilbert-base-uncased}) embeddings to all three branches; (ii)~extracts n-grams with a ReLU CNN; (iii)~models context with a GELU Transformer encoder; (iv)~models order with a bidirectional LSTM and attention pooling; (v)~refines each branch through cross-view interaction and fuses them with learnable weights; and (vi)~outputs class probabilities through a fully connected layer and softmax.
+
+\section{Baseline Models}
+
+We compare TriFuse against five baselines from classical and neural text classification \cite{ref3},~\cite{ref5},~\cite{ref6},~\cite{ref7},~\cite{ref8},~\cite{ref31}. Each baseline isolates one standard modeling choice.
+
+\subsection{Bidirectional Long Short-Term Memory (BiLSTM)}
+
+Bidirectional LSTM networks model dependencies with respect to both future and past context. The LSTM cell has gating functions:
+\begin{equation}
+\begin{aligned}
+f_t &= \sigma(W_f x_t + U_f h_{t-1} + b_f) \\
+i_t &= \sigma(W_i x_t + U_i h_{t-1} + b_i) \\
+\tilde{c}_t &= \tanh(W_c x_t + U_c h_{t-1} + b_c) \\
+c_t &= f_t \odot c_{t-1} + i_t \odot \tilde{c}_t \\
+o_t &= \sigma(W_o x_t + U_o h_{t-1} + b_o) \\
+h_t &= o_t \odot \tanh(c_t)
+\end{aligned}
+\end{equation}
+In the bidirectional configuration, forward and backward hidden states are concatenated for classification.
+
+\subsection{Convolutional Neural Network (CNN)}
+
+The CNN classifier uses the sentence classification architecture defined by Kim \cite{ref7}. Given a filter $W \in \mathbb{R}^{k \times D}$, convolution is computed as:
+\begin{equation}
+c_i = f(W \cdot x_{i:i+k-1} + b)
+\end{equation}
+where $k$ is the kernel width, $f(\cdot)$ is ReLU, and max-over-time pooling selects the most salient feature from each feature map.
+
+\subsection{Tuned LSTM}
+
+The Tuned LSTM baseline is a single-directional LSTM with higher hidden dimensionality, dropout regularization, and three layers:
+\[
+h_t = \mathrm{LSTM}(x_t, h_{t-1}).
+\]
+This baseline checks whether a deeper unidirectional LSTM alone is sufficient for the binary task.
+
+\subsection{Random Forest (RF)}
+
+Random Forest \cite{ref5} is an ensemble learning method that aggregates decision trees trained on bootstrap samples with random feature selection. The final prediction is obtained through majority voting:
+\begin{equation}
+\hat{y} = \mathrm{mode} \{T_m(X)\}_{m=1}^{M}
+\end{equation}
+Random Forest acts as a non-neural baseline using TF-IDF features.
+
+\subsection{LightGBM}
+
+LightGBM \cite{ref6} is a gradient boosting framework that minimizes a differentiable loss function sequentially:
+\begin{equation}
+F_m(x) = F_{m-1}(x) + \eta h_m(x)
+\end{equation}
+where $F_m(x)$ is the model at iteration $m$, $h_m(x)$ is a weak learner, and $\eta$ is the learning rate. It provides a strong ensemble baseline on TF-IDF features.
+
+%% ====================================================================
+%% SECTION VI: EXPERIMENTAL SETUP
+%% ====================================================================
+\section{Experimental Setup}
+
+All models share the workflow in Fig.~\ref{fig:pipeline}: data preparation, token encoding, training with early stopping, and reporting accuracy, precision, recall, and F1 on the same held-out splits.
+
+\begin{figure}[!t]
+\centering
+\input{fig04_training_pipeline}
+\caption{Experimental training and evaluation pipeline.}
+\label{fig:pipeline}
+\end{figure}
+
+\subsection{Data Splitting and Encoding}
+
+Each dataset was split using stratified sampling, preserving class priors across train, validation, and test subsets:
+\[
+P_{\mathrm{train}}(y) \approx P_{\mathrm{val}}(y) \approx P_{\mathrm{test}}(y).
+\]
+The default partition is 70\% training, 15\% validation, and 15\% testing with seed 42. Models were additionally evaluated with stratified 5-fold cross-validation on the full corpus. All texts were tokenized and indexed; sequences were padded or truncated to $L=128$, and the vocabulary retained the 20,000 most frequent training tokens.
+
+\subsection{Optimization and Learning Schedule}
+
+Training used the AdamW optimizer \cite{ref25}:
+\begin{equation}
+\theta_{t+1} = \theta_t - \eta \frac{\hat{m}_t}{\sqrt{\hat{v}_t} + 10^{-8}} - \lambda \theta_t
+\end{equation}
+where $\eta$ denotes the learning rate, $\hat{m}_t$ and $\hat{v}_t$ are bias-corrected moment estimates, and $\lambda$ is the weight decay coefficient. Baseline neural models used initial learning rate $10^{-3}$ with cosine annealing warm restarts:
+\begin{equation}
+\eta_t = \eta_{\min} + \frac{1}{2}(\eta_{\max} - \eta_{\min}) \left(1 + \cos\left(\frac{T_{\mathrm{cur}}}{T_i}\pi\right)\right)
+\end{equation}
+TriFuse used learning rate $5 \times 10^{-4}$, patience 25, OneCycleLR scheduling, and higher learning rates for cross-view and attention parameters. The DistilBERT front end followed the partial fine-tuning setup in Section~IV-B. Gradient norms were clipped with threshold $\tau = 1.0$:
+\[
+g \leftarrow \frac{g}{\max\left(1, \frac{\|g\|_2}{\tau}\right)}.
+\]
+
+\subsection{Loss Function}
+
+Focal Loss \cite{ref23} emphasized minority instances that are hard to classify:
+\begin{equation}
+\mathrm{FL}(p_t) = -\alpha (1 - p_t)^\gamma \log(p_t)
+\end{equation}
+where $p_t$ denotes the predicted probability of the actual class, $\gamma = 2.0$, and $\alpha = 0.25$.
+
+\subsection{Training Configuration}
+
+All neural models were trained for a maximum of 100 epochs with early stopping if validation accuracy did not improve for 15 consecutive epochs (25 for TriFuse). Batch size was 16. Dropout rate was 0.3. All experiments used PyTorch with GPU acceleration when available and random seed 42 for reproducibility. The best-performing checkpoint on the validation set was used for test evaluation. Fig.~\ref{fig:training} illustrates representative loss, accuracy, and learning-rate dynamics for TriFuse on Dataset~II under this configuration.
+
+\begin{figure}[!t]
+\centering
+\input{fig08_training}
+\caption{TriFuse training dynamics on Dataset~II (AdamW, batch size 16, patience 25, OneCycleLR).}
+\label{fig:training}
+\end{figure}
+
+\subsection{Evaluation Metrics}
+
+Performance was evaluated using accuracy, precision, recall, and F1-score:
+\begin{equation}
+\begin{aligned}
+\mathrm{Accuracy} &= \frac{TP + TN}{TP + TN + FP + FN} \\
+\mathrm{Precision} &= \frac{TP}{TP + FP} \\
+\mathrm{Recall} &= \frac{TP}{TP + FN} \\
+F1 &= \frac{2 \cdot \mathrm{Precision} \cdot \mathrm{Recall}}{\mathrm{Precision} + \mathrm{Recall}}
+\end{aligned}
+\end{equation}
+where $TP$, $TN$, $FP$, and $FN$ denote true positives, true negatives, false positives, and false negatives, respectively.
+
+\section{Results and Discussion}
+
+Tables~\ref{tab:baseline_dual} and~\ref{tab:kfold_dual} report single-split and 5-fold scores for TriFuse and the five baselines on both corpora under the same splits and training budget.
+
+\subsection{Baseline Model Comparison}
+
+Table~\ref{tab:baseline_dual} and Fig.~\ref{fig:baseline_comp} report single-split test results for all models on both datasets.
+
+\begin{table}[!t]
+\caption{Baseline Model Comparison: Single-Split Test Results}
+\label{tab:baseline_dual}
+\centering
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{|l|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{2}{*}{Model} & \multicolumn{4}{c|}{Dataset~I (Shahane)} & \multicolumn{4}{c|}{Dataset~II (Davidson)} \\
+\cline{2-9}
+ & Acc. & Prec. & Rec. & F1 & Acc. & Prec. & Rec. & F1 \\
+\hline
+Random Forest & 92.28\% & 91.56\% & 92.28\% & 91.10\% & 92.91\% & 92.68\% & 92.91\% & 92.51\% \\
+LightGBM & 87.88\% & 92.02\% & 87.88\% & 89.23\% & 94.73\% & 95.66\% & 94.73\% & 94.96\% \\
+CNN & 93.93\% & 93.50\% & 93.93\% & 93.52\% & 95.82\% & 95.92\% & 95.82\% & 95.86\% \\
+BiLSTM & 94.28\% & 94.00\% & 94.28\% & 94.08\% & 95.71\% & 96.03\% & 95.71\% & 95.81\% \\
+Tuned LSTM & 94.18\% & 93.80\% & 94.18\% & 93.77\% & 95.84\% & 95.98\% & 95.84\% & 95.89\% \\
+\textbf{TriFuse (Proposed)} & \textbf{94.32\%} & \textbf{94.03\%} & \textbf{94.32\%} & \textbf{94.12\%} & \textbf{95.87\%} & \textbf{95.96\%} & \textbf{95.87\%} & \textbf{95.91\%} \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+\begin{figure}[!t]
+\centering
+\input{fig05_baseline_comparison}
+\caption{Baseline and TriFuse test accuracy on Dataset~I and Dataset~II.}
+\label{fig:baseline_comp}
+\end{figure}
+
+\begin{table}[!t]
+\caption{Stratified 5-Fold Cross-Validation Results (mean\,$\pm$\,std)}
+\label{tab:kfold_dual}
+\centering
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+\multirow{2}{*}{Model} & \multicolumn{2}{c|}{Dataset~I (Shahane)} & \multicolumn{2}{c|}{Dataset~II (Davidson)} \\
+\cline{2-5}
+ & Accuracy & F1-score & Accuracy & F1-score \\
+\hline
+Random Forest & 92.33\,$\pm$\,0.05\% & 91.21\,$\pm$\,0.04\% & 93.06\,$\pm$\,0.32\% & 92.71\,$\pm$\,0.35\% \\
+LightGBM & 87.70\,$\pm$\,0.19\% & 89.09\,$\pm$\,0.17\% & 94.58\,$\pm$\,0.40\% & 94.82\,$\pm$\,0.37\% \\
+CNN & 93.96\,$\pm$\,0.08\% & 93.60\,$\pm$\,0.15\% & 95.32\,$\pm$\,0.35\% & 95.36\,$\pm$\,0.38\% \\
+BiLSTM & 94.24\,$\pm$\,0.10\% & 94.05\,$\pm$\,0.14\% & 95.28\,$\pm$\,0.49\% & 95.26\,$\pm$\,0.55\% \\
+Tuned LSTM & 94.22\,$\pm$\,0.08\% & 94.14\,$\pm$\,0.06\% & 95.31\,$\pm$\,0.52\% & 95.32\,$\pm$\,0.59\% \\
+\textbf{TriFuse (Proposed)} & \textbf{94.29\,$\pm$\,0.13\%} & \textbf{94.07\,$\pm$\,0.27\%} & \textbf{95.37\,$\pm$\,0.23\%} & \textbf{95.41\,$\pm$\,0.24\%} \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+TriFuse tops every result table reported here, but the lead over CNN, BiLSTM, and Tuned LSTM is narrow (0.03--0.16 accuracy points on the held-out test split). On Dataset~II the 5-fold accuracy spread is 0.23\%, below CNN (0.35\%) and Tuned LSTM (0.52\%), yet paired tests on fold scores did not reach significance at $\alpha=0.05$ (Section~VII-D). The practical reading is the stable ordering under our fixed protocols, not a large margin.
+
+\subsection{Discussion of Baseline Results}
+
+On Shahane, TriFuse reaches 94.32\% test accuracy is slightly above BiLSTM (94.28\%) and well above the tree models. On Davidson it scores 95.87\%, ahead of CNN (95.82\%), Tuned LSTM (95.84\%), and BiLSTM (95.71\%). Cross-validation gives 94.29\,$\pm$\,0.13\% on Dataset~I and 95.37\,$\pm$\,0.23\% on Dataset~II. TriFuse also show the lowest accuracy variance among neural baselines on the Dataset~II. Table~\ref{tab:single_branch_dual} shows that no single branch matches the full model.
+
+
+
+\subsection{Multi-View Representation Analysis}
+
+Table~\ref{tab:single_branch_dual} and Fig.~\ref{fig:feature_effect} report single-branch configurations on both datasets.
+
+\begin{table}[!t]
+\caption{Single-Branch Performance}
+\label{tab:single_branch_dual}
+\centering
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{|l|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{2}{*}{Variant} & \multicolumn{4}{c|}{Dataset~I (Shahane)} & \multicolumn{4}{c|}{Dataset~II (Davidson)} \\
+\cline{2-9}
+ & Acc. & Prec. & Rec. & F1 & Acc. & Prec. & Rec. & F1 \\
+\hline
+Lexical Only & 93.99\% & 93.80\% & 93.99\% & 93.88\% & 95.84\% & 95.90\% & 95.84\% & 95.87\% \\
+Semantic Only & 92.99\% & 93.23\% & 92.99\% & 93.10\% & 95.46\% & 95.66\% & 95.46\% & 95.53\% \\
+Structural Only & 93.91\% & 93.53\% & 93.91\% & 93.59\% & 95.57\% & 95.50\% & 95.57\% & 95.53\% \\
+\textbf{TriFuse (Full)} & \textbf{94.32\%} & \textbf{94.03\%} & \textbf{94.32\%} & \textbf{94.12\%} & \textbf{95.87\%} & \textbf{95.96\%} & \textbf{95.87\%} & \textbf{95.91\%} \\
+\hline
+\end{tabular}
+}
+\vspace{2pt}
+{\footnotesize \textit{Note:} Single-branch variants, including structural-only (isolated BiLSTM branch), use the same splits, seed, and training budget as the ablation study in Section~VIII.}
+\end{table}
+
+\begin{figure}[!t]
+\centering
+\input{fig06_single_branch}
+\caption{Comparison of the test accuracy between single-branch models and the full TriFuse architecture on both the datasets.}
+\label{fig:feature_effect}
+\end{figure}
+
+The lexical branch alone hits 93.99\% on Dataset~I and 95.84\% on Dataset~II, so local n-grams carry much of the signal. The semantic branch lags at 92.99\% and 95.46\%; the structural branch sits between them (93.91\% and 95.57\%). Full fusion still improves on any branch when used alone.
+\subsection{Comparison with State-of-the-Art}
+
+Table~\ref{tab:sota_positioning} contrasts design choices at a high level. Many published systems vote or stack models after separate training; TriFuse keeps fusion inside the network and learns the branch weights during training.
+
+\begin{table}[!t]
+\caption{Qualitative Comparison of Architectural Characteristics}
+\label{tab:sota_positioning}
+\centering
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+\textbf{Property} & \textbf{Feature ML} & \textbf{Single DL} & \textbf{Ensemble} & \textbf{TriFuse} \\
+\hline
+Lexical modeling & \checkmark & Partial & \checkmark & \checkmark \\
+\hline
+Semantic context & $\times$ & \checkmark & \checkmark & \checkmark \\
+\hline
+Structural sequencing & $\times$ & Partial & Partial & \checkmark \\
+\hline
+Cross-view interaction & $\times$ & $\times$ & $\times$ & \checkmark \\
+\hline
+Representation fusion & $\times$ & $\times$ & $\times$ & \checkmark \\
+\hline
+Attention weighting & $\times$ & $\times$ & $\times$ & \checkmark \\
+\hline
+End-to-end learning & $\times$ & \checkmark & $\times$ & \checkmark \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+Scores from other papers are not directly comparable because splits, labels, and preprocessing differ. Under our own setup, TriFuse usually leads the best neural baseline by 0.03--0.16 test accuracy points. We ran paired Wilcoxon and paired $t$-tests on the five Davidson fold accuracies from the project logs. Mean fold accuracy was 95.37\% for TriFuse and 95.31\% for Tuned LSTM; both tests gave $p>0.05$ (Wilcoxon $p=0.625$; paired $t$, $p=0.79$), matching the small gaps in Tables~\ref{tab:baseline_dual} and~\ref{tab:kfold_dual}.  
+
+\subsection{Limitations}
+
+Six limitations should be noted. (i) Score gains over CNN, BiLSTM, and Tuned LSTM are small, and paired tests on Dataset~II were not significant at $\alpha=0.05$. (ii) Recent Transformer-heavy systems \cite{ref14},~\cite{ref15},~\cite{ref16} are discussed qualitatively rather than retrained on our Shahane/Davidson splits. (iii) Dataset~I mixes several annotation schemes into one abusive class, which helps coverage but blurs label semantics. (iv) DistilBERT front-end that is partially fine-tuned provides token
+vectors, so that pre-training helps to contribute to the score.
+(v) Only English binary labeling is considered; no finer-grained
+moderation categories, images, and user metadata are considered.
+(vi) TriFuse is a heavier model to train compared to baseline models
+with one branch only; Section~VII-F reports that sarcasm and quoted offensive language still cause errors despite fusion.
+
+\subsection{Error Analysis}
+
+We reviewed misclassified test posts from Dataset~I and Dataset~II to see where TriFuse failed. False negatives often involved sarcasm or indirect insults: the text looked harmless alone but hostile in context. False positives were common when slurs or aggressive words appeared in jokes, lyrics, or quotes that were not directed at anyone. Both error types depend on surrounding dialogue or speaker intent, which a single-post classifier cannot see. Reply chains, user history, or non-text signals may be needed for the hardest remaining cases.
+
+\section{Ablation Study}
+
+The ablation variants were built by removing or simplifying parts of TriFuse while keeping all other training and evaluation settings the same as in the main experiments.
+
+\subsection{Branch-Level Contribution Analysis}
+
+Table~\ref{tab:ablation_dual} and Fig.~\ref{fig:ablation} list ablation scores on both datasets. TriFuse (Full) gives the highest accuracy in every column---94.32\% on Dataset~I and 95.87\% on Dataset~II---ahead of all single-branch, two-branch, and late-fusion variants.
+
+\begin{table}[!t]
+\caption{Branch-Level Ablation Results}
+\label{tab:ablation_dual}
+\centering
+\resizebox{\columnwidth}{!}{
+\begin{tabular}{|l|c|c|c|c|c|c|c|c|}
+\hline
+\multirow{2}{*}{Variant} & \multicolumn{4}{c|}{Dataset~I (Shahane)} & \multicolumn{4}{c|}{Dataset~II (Davidson)} \\
+\cline{2-9}
+ & Acc. & Prec. & Rec. & F1 & Acc. & Prec. & Rec. & F1 \\
+\hline
+Lexical Only & 93.99\% & 93.80\% & 93.99\% & 93.88\% & 95.84\% & 95.90\% & 95.84\% & 95.87\% \\
+Semantic Only & 92.99\% & 93.23\% & 92.99\% & 93.10\% & 95.46\% & 95.66\% & 95.46\% & 95.53\% \\
+Lexical + Semantic & 94.08\% & 93.80\% & 94.08\% & 93.90\% & 95.68\% & 96.02\% & 95.68\% & 95.78\% \\
+Lexical + Structural & 93.93\% & 93.68\% & 93.93\% & 93.77\% & 95.73\% & 95.79\% & 95.73\% & 95.76\% \\
+Semantic + Structural & 94.18\% & 93.81\% & 94.18\% & 93.87\% & 95.65\% & 95.93\% & 95.65\% & 95.74\% \\
+Late Fusion & 94.25\% & 93.89\% & 94.25\% & 93.82\% & 95.73\% & 95.96\% & 95.73\% & 95.81\% \\
+\textbf{TriFuse (Full)} & \textbf{94.32\%} & \textbf{94.03\%} & \textbf{94.32\%} & \textbf{94.12\%} & \textbf{95.87\%} & \textbf{95.96\%} & \textbf{95.87\%} & \textbf{95.91\%} \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+\begin{figure}[!t]
+\centering
+\input{fig07_ablation}
+\caption{Test accuracy of branch-level ablation variants on Dataset~I and Dataset~II.}
+\label{fig:ablation}
+\end{figure}
+
+\subsection{Attention-Based Fusion Mechanism}
+
+Learned attention sets different weights on the three branches before softmax (Fig.~\ref{fig:branches_fusion}). Compared with late fusion, TriFuse gains 0.14 points on Dataset~II (95.87\% vs.\ 95.73\%) and 0.07 points on Dataset~I (94.32\% vs.\ 94.25\%). Cross-view layers and the diversity loss account for part of that gap because late fusion gives the branches less shared training signal. Training curves for the full model on Davidson appear in Fig.~\ref{fig:training}.
+
+\subsection{Summary of Findings}
+
+The ablation runs point to four conclusions:
+\begin{enumerate}
+\item A single branch misses part of the signal on each corpus.
+\item Two-branch setups beat one branch but stay below the full model.
+\item Late fusion trails the learned fusion block on both datasets.
+\item The complete TriFuse stack gives the top accuracy in every column of Table~\ref{tab:ablation_dual}.
+\end{enumerate}
+
+%% ====================================================================
+%% SECTION IX: CONCLUSION
+%% ====================================================================
+\section{Conclusion}
+
+TriFuse is a cyberbullying classifier with three parallel encoders---CNN for n-grams, Transformer for context, BiLSTM for word order---joined by cross-view attention and a learnable fusion layer. Focal Loss and auxiliary branch heads were used during training to offset class imbalance.
+
+On Shahane (Dataset~I) and Davidson (Dataset~II), TriFuse ranked first among all five baselines in both single-split tests and 5-fold cross-validation: 94.32\% test accuracy (94.12\% F1, 94.29\,$\pm$\,0.13\% CV) on Dataset~I, and 95.87\% test accuracy (95.91\% F1, 95.37\,$\pm$\,0.23\% CV) on Dataset~II. Ablations showed that removing a branch or using late fusion lowered scores on both corpora. Gains over CNN, BiLSTM, and Tuned LSTM were small, and paired tests on Dataset~II folds were not significant at $\alpha=0.05$, but the same ordering appeared on every split we ran.
+
+Training lexical, semantic, and structural views together with attention-based fusion is a practical option for large-scale text moderation: one network covers several cue types without separate models or post-hoc ensembles. The architecture can fit into platform screening pipelines where training and serving cost matter, and the error cases in Section~VII-F show where thread context or multimodal inputs would be the next extension.
+

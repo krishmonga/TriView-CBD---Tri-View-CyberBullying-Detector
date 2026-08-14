@@ -1,0 +1,10 @@
+Dear Editor,
+
+We submit "Mitigating Cyberbullying with TriFuse" for the IAES International Journal of Artificial Intelligence.
+
+TriFuse is a multi-view deep learning model (CNN + Transformer + BiLSTM) for cyberbullying detection with dual-dataset evaluation and ablation studies. We believe it fits IJ-AI's scope in artificial intelligence and text classification.
+
+This work is original and not submitted elsewhere.
+
+Krish Monga (First Author)
+krishmonga21667@gmail.com

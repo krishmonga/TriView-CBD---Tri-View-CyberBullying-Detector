@@ -1,0 +1,24 @@
+% Fig. 5 — Baseline model comparison (Table IV data, pgfplots vector)
+\begin{tikzpicture}
+\begin{axis}[
+  trifuse bar,
+  width=\columnwidth,
+  height=0.58\columnwidth,
+  title={Baseline Model Comparison on Both Datasets},
+  symbolic x coords={RF,LightGBM,CNN,BiLSTM,{Tuned LSTM},TriFuse},
+  xtick=data,
+  x tick label style={rotate=28, anchor=east, font=\scriptsize},
+  ymin=85,
+  ymax=97.2,
+  legend style={at={(0.02,0.02)}, anchor=south west},
+  legend cell align={left},
+]
+\addplot+[fill=trifuseBlue!85, draw=black!50] coordinates {
+  (RF,92.28) (LightGBM,87.88) (CNN,93.93) (BiLSTM,94.28) ({Tuned LSTM},94.18) (TriFuse,94.32)
+};
+\addplot+[fill=trifuseGreen!85, draw=black!50] coordinates {
+  (RF,92.91) (LightGBM,94.73) (CNN,95.82) (BiLSTM,95.71) ({Tuned LSTM},95.84) (TriFuse,95.87)
+};
+\legend{Dataset~I (Shahane), Dataset~II (Davidson)}
+\end{axis}
+\end{tikzpicture}
